@@ -148,6 +148,21 @@ const panicFormTone = {
   input: 'font-bold text-white',
 }
 
+const panicBlackTextKeys = new Set(['closed', 'riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'canSubmit'])
+
+function panicInputClass(key) {
+  return panicBlackTextKeys.has(key)
+    ? 'border-[#7f1d1d] bg-[#c40000] text-black'
+    : 'border-[#7f1d1d] bg-[#c40000] text-white'
+}
+
+function panicFormToneFor(key) {
+  if (panicBlackTextKeys.has(key)) {
+    return { ...panicFormTone, input: 'font-bold text-black' }
+  }
+  return panicFormTone
+}
+
 const fieldTooltips = {
   tradeCron: 'CRON 14: send_trade_confirmation',
   duplicateAlpaca: 'CRON 12: duplicate_alpaca_accounts',
@@ -340,7 +355,7 @@ function fieldTone(key, value) {
   if (key === 'active' || key === 'approved') return { box: 'border-emerald-200 bg-[#E8FAF1]', label: 'text-emerald-700', input: 'font-semibold text-emerald-700' }
   if (key === 'rejected') return { box: 'border-red-200 bg-[#FFF0F3]', label: 'text-red-700', input: 'font-semibold text-red-700' }
   if (greenMoneyKeys.has(key)) return { box: 'border-slate-200 bg-slate-50', label: 'text-slate-600', input: 'font-semibold text-emerald-600' }
-  if (isPanicAlert(key, value)) return panicFormTone
+  if (isPanicAlert(key, value)) return panicFormToneFor(key)
   if (warningKeys.has(key) && num(value) > 0) return { box: 'border-red-200 bg-red-50', label: 'text-red-700', input: 'font-semibold text-red-700' }
   return { box: 'border-slate-200 bg-slate-50', label: 'text-slate-600', input: '' }
 }
@@ -386,7 +401,7 @@ function SimpleFormGrid({ fields, values, setValues, previousValues, readOnlyKey
         const alert = isPanicAlert(key, values[key])
         const inputTone = alert || (warningKeys.has(key) && num(values[key]) > 0)
           ? alert
-            ? 'border-[#7f1d1d] bg-[#c40000] text-white'
+            ? panicInputClass(key)
             : 'border-red-200 bg-red-50'
           : greenMoneyKeys.has(key)
             ? 'border-slate-200 bg-slate-50'
@@ -1047,7 +1062,7 @@ export default function App() {
                       {canSubmitAlert && <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" aria-hidden />}
                       Can Submit
                     </span>
-                    <NumberInput ariaLabel="Can Submit" value={data.cip.canSubmit} className={`${canSubmitAlert ? 'border-[#7f1d1d] bg-[#c40000] text-white' : ''} ${canSubmitTone.input}`.trim()} onChange={(v) => updateCip({ canSubmit: v })} />
+                    <NumberInput ariaLabel="Can Submit" value={data.cip.canSubmit} className={`${canSubmitAlert ? panicInputClass('canSubmit') : ''} ${canSubmitTone.input}`.trim()} onChange={(v) => updateCip({ canSubmit: v })} />
                     <div className="mt-1">
                       <DeltaHint current={data.cip.canSubmit} previous={prev?.cip?.canSubmit} />
                     </div>
