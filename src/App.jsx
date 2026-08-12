@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Clipboard, ExternalLink, Eye, FolderOpen, Info, Mail, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { Check, Clipboard, Columns2, ExternalLink, Eye, FolderOpen, Info, Mail, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react'
 
 const TIMES = ['11:30 AM', '5:30 PM']
 const LAYOUT_KEY = 'trading-ria-layout-mode'
@@ -184,11 +184,15 @@ function formatLongDate(isoDate) {
 }
 
 function periodFor(time) {
-  if (time === TIMES[1]) return 'evening'
-  if (time === TIMES[0]) return 'morning'
   const parsed = parseTime12h(time)
   if (!parsed) return 'morning'
-  return parsed.hours * 60 + parsed.minutes >= 17 * 60 + 30 ? 'evening' : 'morning'
+  const mins = parsed.hours * 60 + parsed.minutes
+  const fourAm = 4 * 60
+  const noon = 12 * 60
+  const fourPm = 16 * 60
+  if (mins >= fourAm && mins < noon) return 'morning'
+  if (mins >= noon && mins < fourPm) return 'afternoon'
+  return 'evening'
 }
 
 function reportFileName(date, time) {
@@ -729,10 +733,6 @@ export default function App() {
 
   const previewToolbar = (
     <div className="flex flex-wrap gap-2">
-      <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={loadPrevious} />
-      <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-        <FolderOpen size={15} /> Load previous
-      </button>
       <button onClick={saveData} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">
         <Save size={15} /> Save
       </button>
@@ -773,33 +773,48 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      <header className="no-print z-20 shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4 px-5 py-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[.18em] text-blue-600">Report Builder</p>
-            <h1 className="text-xl font-extrabold text-slate-950">Trading &amp; RIA Daily Report</h1>
+      <header className="no-print relative z-20 shrink-0 border-b border-slate-200/70 bg-gradient-to-b from-white via-white to-slate-50/90 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_10px_30px_-12px_rgba(15,76,206,0.12)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[2000px] flex-wrap items-center justify-between gap-4 px-5 py-3.5 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md shadow-blue-600/25">
+              <Mail size={18} strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600/90">Report Builder</p>
+              <h1 className="truncate text-lg font-extrabold tracking-tight text-slate-950 sm:text-xl">Trading &amp; RIA Daily Report</h1>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center rounded-xl border border-slate-200/80 bg-slate-100/70 p-1 shadow-inner">
               <button
                 type="button"
                 onClick={() => setLayoutMode('modal')}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${layoutMode === 'modal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${layoutMode === 'modal' ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80' : 'text-slate-500 hover:bg-white/60 hover:text-slate-700'}`}
               >
-                Modal preview
+                <Eye size={14} /> Modal
               </button>
               <button
                 type="button"
                 onClick={() => setLayoutMode('split')}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${layoutMode === 'split' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${layoutMode === 'split' ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80' : 'text-slate-500 hover:bg-white/60 hover:text-slate-700'}`}
               >
-                Split view
+                <Columns2 size={14} /> Split
               </button>
             </div>
-            <label className="text-xs font-semibold text-slate-500">
-              Date <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="ml-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800" />
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
+
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Date</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="rounded-md border-0 bg-transparent px-0 py-0 text-sm font-semibold text-slate-800 outline-none focus:ring-0"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-2 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Time</span>
               <select
                 aria-label="Report time"
                 value={isPresetTime(time) ? time : CUSTOM_TIME_VALUE}
@@ -811,23 +826,26 @@ export default function App() {
                     setTime(value)
                   }
                 }}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold"
+                className="rounded-md border-0 bg-transparent py-0 pl-0 pr-6 text-sm font-semibold text-slate-800 outline-none focus:ring-0"
               >
                 <option value={TIMES[0]}>{TIMES[0]}</option>
                 <option value={TIMES[1]}>{TIMES[1]}</option>
                 <option value={CUSTOM_TIME_VALUE}>Custom...</option>
               </select>
               {!isPresetTime(time) && (
-                <select
-                  aria-label="Custom report time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800"
-                >
-                  {TIME_OPTIONS.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
+                <>
+                  <span className="hidden h-4 w-px bg-slate-200 sm:block" />
+                  <select
+                    aria-label="Custom report time"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    className="rounded-md border-0 bg-transparent py-0 pl-0 pr-6 text-sm font-semibold text-slate-800 outline-none focus:ring-0"
+                  >
+                    {TIME_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </>
               )}
             </div>
           </div>
@@ -836,9 +854,18 @@ export default function App() {
 
       <main className={`mx-auto min-h-0 w-full flex-1 gap-6 overflow-y-auto p-5 ${layoutMode === 'split' ? 'grid max-w-[2000px] xl:grid-cols-[minmax(620px,1fr)_minmax(520px,.9fr)] xl:overflow-hidden' : 'max-w-4xl'}`}>
         <div className={`no-print min-h-0 space-y-5 ${layoutMode === 'split' ? 'xl:overflow-y-auto xl:pr-1' : ''}`}>
+          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={loadPrevious} />
           <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <p className="text-xs font-bold uppercase text-blue-700">Generated subject</p>
-            <p className="mt-1 font-semibold text-blue-950">{subject}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-bold uppercase text-blue-700">Generated subject</p>
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+              >
+                <FolderOpen size={14} /> Load previous
+              </button>
+            </div>
+            <p className="mt-2 font-semibold text-blue-950">{subject}</p>
           </div>
 
           {previous && (
