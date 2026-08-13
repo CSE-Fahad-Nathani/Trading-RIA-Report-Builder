@@ -48,7 +48,7 @@ const fixedUtmRows = [
 const commonFields = [
   ['kycWaiting', 'Users Waiting for KYC Approval'],
   ['riaPortfolioChangeRequests', 'RIA Portfolio Change Requests'],
-  ['signupErrors', 'Users with signup Errors'],
+  ['signupErrors', 'Users with Account Errors'],
   ['w8ben', 'W8BEN Not Submitted'],
   ['tradeCron', 'send_trade_confirmation [Cron]'],
   ['duplicateAlpaca', 'Duplicate Alpaca Accounts [Cron]'],
@@ -441,6 +441,12 @@ function tableHtml(headers, rows, align = [], thExtra = '') {
   return `<table role="presentation" style="${emailCss.table}"><thead><tr>${headers.map((h, i) => `<th style="${emailCss.th};${thExtra};${align[i] === 'right' ? 'text-align:right' : ''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell, i) => `<td style="${emailCss.td};${align[i] === 'right' ? 'text-align:right' : ''}">${cell}</td>`).join('')}</tr>`).join('')}</tbody></table>`
 }
 
+const emphasisReportKeys = new Set(['totalFund', 'maxFund', 'fundedUsers', 'active', 'approved', 'rejected'])
+
+function emphasisLabel(label) {
+  return `<span style="font-weight:600">${label}</span>`
+}
+
 function metricCards(items, color, valueSize = '22px', labelSize = '10px') {
   return `<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:5px"><tr>${items.map(([label, value]) => `<td style="width:25%;padding:12px;background:#f7f9fc;border:1px solid #dbe3ef;border-radius:9px"><div style="font-size:${valueSize};font-weight:700;color:${color}">${value}</div><div style="font-size:${labelSize};font-weight:700;color:#61708a;text-transform:uppercase;margin-top:4px">${label}</div></td>`).join('')}</tr></table>`
 }
@@ -476,7 +482,7 @@ function statusCell(key, value) {
 function accountStatusRows(fields, values) {
   return fields
     .filter(([key]) => key !== 'approved' || num(values[key]) > 0)
-    .map(([key, label]) => [label, statusCell(key, values[key])])
+    .map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, statusCell(key, values[key])])
 }
 
 function buildAccountStatusHtml(fields, values) {
@@ -490,7 +496,7 @@ function buildAccountStatusHtml(fields, values) {
           <td style="${panicCellStyles('right')}">${panicValueHtml(display(val))}</td>
         </tr>`
       }
-      return `<tr><td style="${emailCss.td}">${label}</td><td style="${emailCss.td};text-align:right">${statusCell(key, val)}</td></tr>`
+      return `<tr><td style="${emailCss.td}">${emphasisReportKeys.has(key) ? emphasisLabel(label) : label}</td><td style="${emailCss.td};text-align:right">${statusCell(key, val)}</td></tr>`
     })
     .join('')
   return `<table role="presentation" style="${emailCss.table}"><thead><tr><th style="${emailCss.th}">Account Status</th><th style="${emailCss.th};text-align:right">Count</th></tr></thead><tbody>${body}</tbody></table>`
@@ -575,14 +581,14 @@ function buildEmail(data, subject) {
   const commonHtml = buildCommonChecksHtml(data.common)
   const multiAccountsHtml = buildMultiAccountsHtml(data.multiAccounts)
   const cipHtml = buildCipReportHtml(data.cip)
-  const tradingRows = tradingFields.map(([key, label]) => [label, moneyCell(key, data.trading[key])])
-  const riaRows = riaFields.map(([key, label]) => [label, key === 'portfolioCheck' ? warningCell(key, data.ria[key]) : moneyCell(key, data.ria[key])])
+  const tradingRows = tradingFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, moneyCell(key, data.trading[key])])
+  const riaRows = riaFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, key === 'portfolioCheck' ? warningCell(key, data.ria[key]) : moneyCell(key, data.ria[key])])
   const utmTotal = data.utm.reduce((sum, row) => sum + num(row.total), 0)
   const utmCreatedTotal = data.utm.reduce((sum, row) => sum + num(row.created), 0)
   const html = `<div style="background:#f4f7fb;padding:20px 8px"><div style="${emailCss.wrap}"><div style="${emailCss.header}"><div style="font-size:24px;font-weight:700">Trading &amp; RIA Report</div><div style="font-size:13px;margin-top:7px;opacity:.9">${subject.replace('Trading & RIA Report - ', '')}</div></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">1. Latest Fund Transfers <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#61708a">(Last Two Days)</span></div>${tableHtml(['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts'], data.transfers.map((r) => [formatLongDate(r.date), accountTypeCell(r.accountType), transferTypeCell(r.type), display(r.amount, true), display(r.accounts)]), ['', '', '', 'right', 'right'])}</div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">2. Trading User Stats</div>${metricCards([['Total Draft', display(data.trading.draft)], ['Account Created', display(data.trading.created)], ['Opened Today', display(data.trading.openToday)], ['Drafts Today', display(data.trading.draftsToday)]], '#0874e8', '26px', '11px')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:60%;vertical-align:top">${tableHtml(['Trading Report', 'Value'], tradingRows.slice(4), ['', 'right'])}</td><td style="width:40%;vertical-align:top">${buildAccountStatusHtml(accountFields, data.tradingAccount)}</td></tr></table></div>
-  <div style="${emailCss.section}"><div style="${emailCss.title};color:#7138dc">3. RIA User Stats</div>${metricCards([['Total Draft', display(data.ria.draft)], ['Account Created', display(data.ria.created)], ['Opened Today', display(data.ria.openToday)], ['Drafts Today', display(data.ria.draftsToday)]], '#7c3aed')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:52%;vertical-align:top">${tableHtml(['RIA Report', 'Value'], riaRows.slice(4), ['', 'right'])}</td><td style="width:48%;vertical-align:top">${tableHtml(['Account Status', 'Count'], accountStatusRows(riaAccountFields, data.riaAccount), ['', 'right'])}<div style="height:8px"></div>${tableHtml(['Users Without Subscription', 'Count'], [['Total', display(data.subscription.without)], ['Funded Users', display(data.subscription.funded)], ['Unfunded Users', display(data.subscription.unfunded)]], ['', 'right'])}</td></tr></table></div>
+  <div style="${emailCss.section}"><div style="${emailCss.title};color:#7138dc">3. RIA User Stats</div>${metricCards([['Total Draft', display(data.ria.draft)], ['Account Created', display(data.ria.created)], ['Opened Today', display(data.ria.openToday)], ['Drafts Today', display(data.ria.draftsToday)]], '#7c3aed')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:52%;vertical-align:top">${tableHtml(['RIA Report', 'Value'], riaRows.slice(4), ['', 'right'])}</td><td style="width:48%;vertical-align:top">${tableHtml(['Account Status', 'Count'], accountStatusRows(riaAccountFields, data.riaAccount), ['', 'right'])}<div style="height:8px"></div>${tableHtml(['Users Without Subscription', 'Count'], [[emphasisLabel('Total'), display(data.subscription.without)], [emphasisLabel('Funded Users'), display(data.subscription.funded)], [emphasisLabel('Unfunded Users'), display(data.subscription.unfunded)]], ['', 'right'])}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">4. Common</div><table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0"><tr><td style="width:55%;vertical-align:top">${commonHtml}</td><td style="width:45%;vertical-align:top">${cipHtml}${multiAccountsHtml}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">5. User UTM Tracking (Top 100) <span style="float:right;background:#e8edff;color:#3448d8;padding:3px 8px;border-radius:10px">Total: ${display(utmTotal)}/${display(utmCreatedTotal)}</span></div>${tableHtml(['Source', 'Medium', 'Campaign', 'Total', 'In Drafts', 'Acc Created'], data.utm.map((r) => [r.source, r.medium, r.campaign, display(r.total), display(r.draft), display(r.created)]), ['', '', '', 'right', 'right', 'right'])}</div>
   </div></div>`
