@@ -33,6 +33,7 @@ function parseTime12h(time) {
 
 const emptyTransfer = () => ({ date: '', accountType: '', type: 'Deposit', amount: '0', accounts: '0' })
 const emptyUtmRow = () => ({ source: '', medium: '', campaign: '', total: '0', draft: '0', created: '0' })
+const emptyProductionFailedApi = () => ({ apiName: '', userId: '', error: '', issueOwner: 'User', createdAt: '' })
 
 const fixedUtmRows = [
   { source: 'musaffa_mobile_app', medium: '—', campaign: '—', total: '118', draft: '44', created: '20' },
@@ -47,6 +48,8 @@ const fixedUtmRows = [
 
 const commonFields = [
   ['kycWaiting', 'Users Waiting for KYC Approval'],
+  ['kycWaitingSsn', 'SSN'],
+  ['kycWaitingNonSsn', 'Non-SSN'],
   ['riaPortfolioChangeRequests', 'RIA Portfolio Change Requests'],
   ['signupErrors', 'Users with Account Errors'],
   ['w8ben', 'W8BEN Not Submitted'],
@@ -70,7 +73,7 @@ const tradingFields = [
   ['openToday', 'Alpaca Accounts Open Today'],
   ['draftsToday', 'Drafts Open Today'],
   ['totalFund', 'Total fund'],
-  ['maxFund', 'Max fund'],
+  ['maxFund', 'Max portfolio'],
   ['fundedUsers', 'Total Funded users'],
 ]
 
@@ -98,6 +101,7 @@ const initialState = () => ({
   common: emptyObject(commonFields),
   multiAccounts: { total: '0', tradingToRia: '0', riaToTrading: '0' },
   cip: emptyObject(cipFields),
+  productionFailedApis: [emptyProductionFailedApi()],
   utm: fixedUtmRows.map((row) => ({ ...row })),
   trading: emptyObject(tradingFields),
   tradingAccount: emptyObject(accountFields),
@@ -175,6 +179,7 @@ const fieldTooltips = {
 
 const MULTI_ACCOUNTS_TOOLTIP = '2nd table: Users with Multi Accounts'
 const CIP_TOOLTIP = 'CRON 9: submit_pending_cip'
+const KYC_WAITING_BREAKDOWN_TOOLTIP = 'KYC waiting count split by SSN and Non-SSN'
 
 const commonReportLabels = {
   tradeCron: 'Trade confirmation emails sent',
@@ -196,6 +201,30 @@ function formatLongDate(isoDate) {
   const d = new Date(`${isoDate}T12:00:00`)
   if (Number.isNaN(d.getTime())) return isoDate
   return `${ordinal(d.getDate())} ${d.toLocaleString('en-GB', { month: 'long' })} ${d.getFullYear()}`
+}
+
+function parseCreatedAtParts(value) {
+  const match = String(value || '').trim().match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2})(?::(\d{2}))?)?$/)
+  if (!match) return { date: '', time: '' }
+  const date = match[1]
+  const time = match[2] ? `${match[2]}:${match[3] || '00'}` : ''
+  return { date, time }
+}
+
+function formatCreatedAtDisplay(value) {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (!match) return value || '—'
+  const [, year, month, day, hour = '00', minute = '00', second = '00'] = match
+  const d = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second))
+  if (Number.isNaN(d.getTime())) return value || '—'
+  const datePart = `${ordinal(d.getDate())} ${d.toLocaleString('en-GB', { month: 'long' })} ${d.getFullYear()}`
+  if (!match[4]) return datePart
+  return `${datePart}, ${d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}`
+}
+
+function composeCreatedAt(date, time) {
+  if (!date) return ''
+  return time ? `${date} ${time}` : date
 }
 
 function periodFor(time) {
@@ -244,8 +273,14 @@ function calcUnfunded(total, funded) {
 function withDerived(data) {
   const ssn = num(data.cip?.ssnToday)
   const nonSsn = num(data.cip?.nonSsnToday)
+  const kycWaitingSsn = num(data.common?.kycWaitingSsn)
+  const kycWaitingNonSsn = Math.max(0, num(data.common?.kycWaiting) - kycWaitingSsn)
   return {
     ...data,
+    common: {
+      ...data.common,
+      kycWaitingNonSsn: String(kycWaitingNonSsn),
+    },
     cip: {
       ...data.cip,
       submittedToday: String(ssn + nonSsn),
@@ -269,6 +304,7 @@ function normalizeLoaded(raw) {
     common: commonMerged,
     multiAccounts: { ...base.multiAccounts, ...(raw.multiAccounts || {}) },
     cip: { ...base.cip, ...(raw.cip || {}) },
+    productionFailedApis: Array.isArray(raw.productionFailedApis) && raw.productionFailedApis.length ? raw.productionFailedApis.map((row) => ({ ...emptyProductionFailedApi(), ...row })) : [],
     utm: Array.isArray(raw.utm) ? base.utm.map((row, i) => ({ ...row, ...(raw.utm[i] || {}) })) : base.utm,
     trading: { ...base.trading, ...(raw.trading || {}) },
     tradingAccount: { ...base.tradingAccount, ...(raw.tradingAccount || {}) },
@@ -334,7 +370,7 @@ function NumberInput({ value, onChange, money = false, ariaLabel, readOnly = fal
   )
 }
 
-function Section({ number, title, subtitle, children }) {
+function Section({ number, title, subtitle, children, headerRight = null }) {
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
@@ -345,6 +381,7 @@ function Section({ number, title, subtitle, children }) {
             {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
           </div>
         </div>
+        {headerRight}
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -502,8 +539,29 @@ function buildAccountStatusHtml(fields, values) {
   return `<table role="presentation" style="${emailCss.table}"><thead><tr><th style="${emailCss.th}">Account Status</th><th style="${emailCss.th};text-align:right">Count</th></tr></thead><tbody>${body}</tbody></table>`
 }
 
+function buildKycWaitingHtml(values) {
+  return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff;margin-bottom:10px">
+    <div style="padding:8px 12px;background:#edf3ff;border-bottom:1px solid #dbe3ef;font-size:11px;font-weight:700;color:#40506a;text-transform:uppercase">KYC Waiting</div>
+    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="background:#f7f9fc">
+        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;font-weight:700;color:#0f4cce">Users Waiting for KYC Approval</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-size:17px;font-weight:700;color:#0f4cce">${display(values.kycWaiting)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px 8px 20px;border-bottom:1px solid #e4eaf2;color:#61708a">↳ SSN</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-weight:600">${display(values.kycWaitingSsn)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px 10px 20px;color:#61708a">↳ Non-SSN</td>
+        <td style="padding:8px 12px 10px;text-align:right;font-weight:600">${display(values.kycWaitingNonSsn)}</td>
+      </tr>
+    </table>
+  </div>`
+}
+
 function buildCommonChecksHtml(values) {
   const body = commonFields
+    .filter(([key]) => !['kycWaiting', 'kycWaitingSsn', 'kycWaitingNonSsn'].includes(key))
     .map(([key, label]) => {
       const val = values[key]
       const reportLabel = commonReportLabels[key] || label
@@ -577,20 +635,54 @@ function buildCipReportHtml(cip) {
   </div>`
 }
 
+function buildProductionFailedApisHtml(rows) {
+  if (!rows.length) {
+    return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff">
+      <div style="padding:8px 12px;background:#c40000;border-bottom:1px solid #7f1d1d;font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase">Production Failed APIs</div>
+      <div style="padding:16px 12px;color:#61708a;font-size:13px;text-align:center">No API errors today</div>
+    </div>`
+  }
+
+  const body = rows.map((row) => [
+    row.apiName || '—',
+    row.userId || '—',
+    row.error || '—',
+    row.issueOwner || '—',
+    formatCreatedAtDisplay(row.createdAt),
+  ])
+
+  return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff">
+    <div style="padding:8px 12px;background:#c40000;border-bottom:1px solid #7f1d1d;font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase">Production Failed APIs</div>
+    <table role="presentation" style="${emailCss.table}">
+      <thead>
+        <tr>
+          ${['API Name', 'Mussafa ID', 'Error Details', 'Issue Source', 'Reported At'].map((h) => `<th style="${emailCss.th}">${h}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${body.map((row) => `<tr>${row.map((cell) => `<td style="${emailCss.td}">${cell}</td>`).join('')}</tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`
+}
+
 function buildEmail(data, subject) {
   const commonHtml = buildCommonChecksHtml(data.common)
+  const kycWaitingHtml = buildKycWaitingHtml(data.common)
   const multiAccountsHtml = buildMultiAccountsHtml(data.multiAccounts)
   const cipHtml = buildCipReportHtml(data.cip)
+  const productionFailedApisHtml = buildProductionFailedApisHtml(data.productionFailedApis || [])
   const tradingRows = tradingFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, moneyCell(key, data.trading[key])])
   const riaRows = riaFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, key === 'portfolioCheck' ? warningCell(key, data.ria[key]) : moneyCell(key, data.ria[key])])
   const utmTotal = data.utm.reduce((sum, row) => sum + num(row.total), 0)
   const utmCreatedTotal = data.utm.reduce((sum, row) => sum + num(row.created), 0)
   const html = `<div style="background:#f4f7fb;padding:20px 8px"><div style="${emailCss.wrap}"><div style="${emailCss.header}"><div style="font-size:24px;font-weight:700">Trading &amp; RIA Report</div><div style="font-size:13px;margin-top:7px;opacity:.9">${subject.replace('Trading & RIA Report - ', '')}</div></div>
-  <div style="${emailCss.section}"><div style="${emailCss.title}">1. Latest Fund Transfers <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#61708a">(Last Two Days)</span></div>${tableHtml(['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts'], data.transfers.map((r) => [formatLongDate(r.date), accountTypeCell(r.accountType), transferTypeCell(r.type), display(r.amount, true), display(r.accounts)]), ['', '', '', 'right', 'right'])}</div>
+  <div style="${emailCss.section}"><div style="${emailCss.title}">1. Latest Fund Transfers <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#61708a">(Last Two Days)</span></div>${data.transfers.length ? tableHtml(['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts'], data.transfers.map((r) => [formatLongDate(r.date), accountTypeCell(r.accountType), transferTypeCell(r.type), display(r.amount, true), display(r.accounts)]), ['', '', '', 'right', 'right']) : `<div style="padding:16px 12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;text-align:center;font-size:13px;font-weight:500">No cash deposit/withdrawal events found.</div>`}</div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">2. Trading User Stats</div>${metricCards([['Total Draft', display(data.trading.draft)], ['Account Created', display(data.trading.created)], ['Opened Today', display(data.trading.openToday)], ['Drafts Today', display(data.trading.draftsToday)]], '#0874e8', '26px', '11px')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:60%;vertical-align:top">${tableHtml(['Trading Report', 'Value'], tradingRows.slice(4), ['', 'right'])}</td><td style="width:40%;vertical-align:top">${buildAccountStatusHtml(accountFields, data.tradingAccount)}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title};color:#7138dc">3. RIA User Stats</div>${metricCards([['Total Draft', display(data.ria.draft)], ['Account Created', display(data.ria.created)], ['Opened Today', display(data.ria.openToday)], ['Drafts Today', display(data.ria.draftsToday)]], '#7c3aed')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:52%;vertical-align:top">${tableHtml(['RIA Report', 'Value'], riaRows.slice(4), ['', 'right'])}</td><td style="width:48%;vertical-align:top">${tableHtml(['Account Status', 'Count'], accountStatusRows(riaAccountFields, data.riaAccount), ['', 'right'])}<div style="height:8px"></div>${tableHtml(['Users Without Subscription', 'Count'], [[emphasisLabel('Total'), display(data.subscription.without)], [emphasisLabel('Funded Users'), display(data.subscription.funded)], [emphasisLabel('Unfunded Users'), display(data.subscription.unfunded)]], ['', 'right'])}</td></tr></table></div>
-  <div style="${emailCss.section}"><div style="${emailCss.title}">4. Common</div><table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0"><tr><td style="width:55%;vertical-align:top">${commonHtml}</td><td style="width:45%;vertical-align:top">${cipHtml}${multiAccountsHtml}</td></tr></table></div>
-  <div style="${emailCss.section}"><div style="${emailCss.title}">5. User UTM Tracking (Top 100) <span style="float:right;background:#e8edff;color:#3448d8;padding:3px 8px;border-radius:10px">Total: ${display(utmTotal)}/${display(utmCreatedTotal)}</span></div>${tableHtml(['Source', 'Medium', 'Campaign', 'Total', 'In Drafts', 'Acc Created'], data.utm.map((r) => [r.source, r.medium, r.campaign, display(r.total), display(r.draft), display(r.created)]), ['', '', '', 'right', 'right', 'right'])}</div>
+  <div style="${emailCss.section}"><div style="${emailCss.title}">4. Common</div><table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0"><tr><td style="width:55%;vertical-align:top">${kycWaitingHtml}${commonHtml}</td><td style="width:45%;vertical-align:top">${cipHtml}${multiAccountsHtml}</td></tr></table></div>
+  <div style="${emailCss.section}"><div style="${emailCss.title}">5. Production Failed APIs</div>${productionFailedApisHtml}</div>
+  <div style="${emailCss.section}"><div style="${emailCss.title}">6. User UTM Tracking (Top 100) <span style="float:right;background:#E8FAF1;color:#067647;padding:4px 10px;border-radius:999px;font-weight:700;text-transform:none;letter-spacing:0">Total UTM: ${display(utmTotal)} | Account Created: ${display(utmCreatedTotal)}</span></div>${tableHtml(['Source', 'Medium', 'Campaign', 'Total', 'In Drafts', 'Acc Created'], data.utm.map((r) => [r.source, r.medium, r.campaign, display(r.total), display(r.draft), display(r.created)]), ['', '', '', 'right', 'right', 'right'])}</div>
   </div></div>`
   return { html, text: `${subject}\n\nPlease view the formatted HTML report in this email.` }
 }
@@ -640,9 +732,21 @@ export default function App() {
   const subject = useMemo(() => subjectFor(date, time), [date, time])
   const email = useMemo(() => buildEmail(data, subject), [data, subject])
   const prev = previous?.data
+  const commonSimpleFields = commonFields.filter(([key]) => !['kycWaiting', 'kycWaitingSsn', 'kycWaitingNonSsn'].includes(key))
+  const hasProductionFailedApis = data.productionFailedApis.length > 0
+  const utmTotal = data.utm.reduce((sum, row) => sum + num(row.total), 0)
+  const utmCreatedTotal = data.utm.reduce((sum, row) => sum + num(row.created), 0)
 
   const updateTransfer = (index, key, value) => setData((old) => ({ ...old, transfers: old.transfers.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }))
   const updateUtm = (index, key, value) => setData((old) => ({ ...old, utm: old.utm.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }))
+  const updateProductionFailedApi = (index, key, value) => setData((old) => ({ ...old, productionFailedApis: old.productionFailedApis.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }))
+  const updateCommon = (patch) => {
+    setData((old) => {
+      const common = { ...old.common, ...patch }
+      common.kycWaitingNonSsn = String(Math.max(0, num(common.kycWaiting) - num(common.kycWaitingSsn)))
+      return { ...old, common }
+    })
+  }
 
   const updateCip = (patch) => {
     setData((old) => {
@@ -906,87 +1010,92 @@ export default function App() {
           )}
 
           <Section number="1" title="Latest Fund Transfers" subtitle="Last Two Days — add or remove rows as transfers change">
-            <div className="overflow-x-auto">
-              <table className="min-w-[760px] w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
-                    {['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts', ''].map((h, i) => (
-                      <th key={i} className="px-2 py-2">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.transfers.map((row, index) => {
-                    const prevRow = prev?.transfers?.[index]
-                    return (
-                      <tr key={index} className={`border-b border-slate-100 align-top ${transferRowBg(row.type)}`}>
-                        <td className="px-2 py-2">
-                          <input
-                            aria-label={`Transfer ${index + 1} date`}
-                            type="date"
-                            value={row.date}
-                            onChange={(e) => updateTransfer(index, 'date', e.target.value)}
-                            className="w-full min-w-[130px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <select
-                            aria-label={`Transfer ${index + 1} account type`}
-                            value={row.accountType || ''}
-                            onChange={(e) => updateTransfer(index, 'accountType', e.target.value)}
-                            className={`w-full min-w-[110px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold ${accountTypeSelectClass(row.accountType)}`}
-                          >
-                            <option value="">Not selected</option>
-                            <option>Trading</option>
-                            <option>RIA</option>
-                          </select>
-                        </td>
-                        <td className="px-2 py-2">
-                          <select
-                            aria-label={`Transfer ${index + 1} type`}
-                            value={row.type}
-                            onChange={(e) => updateTransfer(index, 'type', e.target.value)}
-                            className={`w-full min-w-[110px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold ${transferTextClass(row.type)}`}
-                          >
-                            <option>Deposit</option>
-                            <option>Withdrawn</option>
-                          </select>
-                        </td>
-                        <td className="w-32 px-2 py-2">
-                          <NumberInput
-                            ariaLabel={`Transfer ${index + 1} amount`}
-                            money
-                            value={row.amount}
-                            className={transferTextClass(row.type)}
-                            onChange={(v) => updateTransfer(index, 'amount', v)}
-                          />
-                          {prevRow && <DeltaHint current={row.amount} previous={prevRow.amount} money />}
-                        </td>
-                        <td className="w-24 px-2 py-2">
-                          <NumberInput
-                            ariaLabel={`Transfer ${index + 1} accounts`}
-                            value={row.accounts}
-                            className={transferTextClass(row.type)}
-                            onChange={(v) => updateTransfer(index, 'accounts', v)}
-                          />
-                          {prevRow && <DeltaHint current={row.accounts} previous={prevRow.accounts} />}
-                        </td>
-                        <td className="w-10 px-2 py-2">
-                          <button
-                            aria-label={`Delete transfer ${index + 1}`}
-                            disabled={data.transfers.length === 1}
-                            onClick={() => setData({ ...data, transfers: data.transfers.filter((_, i) => i !== index) })}
-                            className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {data.transfers.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm font-medium text-slate-500">
+                No cash deposit/withdrawal events found.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-[760px] w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
+                      {['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts', ''].map((h, i) => (
+                        <th key={i} className="px-2 py-2">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.transfers.map((row, index) => {
+                      const prevRow = prev?.transfers?.[index]
+                      return (
+                        <tr key={index} className={`border-b border-slate-100 align-top ${transferRowBg(row.type)}`}>
+                          <td className="px-2 py-2">
+                            <input
+                              aria-label={`Transfer ${index + 1} date`}
+                              type="date"
+                              value={row.date}
+                              onChange={(e) => updateTransfer(index, 'date', e.target.value)}
+                              className="w-full min-w-[130px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <select
+                              aria-label={`Transfer ${index + 1} account type`}
+                              value={row.accountType || ''}
+                              onChange={(e) => updateTransfer(index, 'accountType', e.target.value)}
+                              className={`w-full min-w-[110px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold ${accountTypeSelectClass(row.accountType)}`}
+                            >
+                              <option value="">Not selected</option>
+                              <option>Trading</option>
+                              <option>RIA</option>
+                            </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            <select
+                              aria-label={`Transfer ${index + 1} type`}
+                              value={row.type}
+                              onChange={(e) => updateTransfer(index, 'type', e.target.value)}
+                              className={`w-full min-w-[110px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold ${transferTextClass(row.type)}`}
+                            >
+                              <option>Deposit</option>
+                              <option>Withdrawn</option>
+                            </select>
+                          </td>
+                          <td className="w-32 px-2 py-2">
+                            <NumberInput
+                              ariaLabel={`Transfer ${index + 1} amount`}
+                              money
+                              value={row.amount}
+                              className={transferTextClass(row.type)}
+                              onChange={(v) => updateTransfer(index, 'amount', v)}
+                            />
+                            {prevRow && <DeltaHint current={row.amount} previous={prevRow.amount} money />}
+                          </td>
+                          <td className="w-24 px-2 py-2">
+                            <NumberInput
+                              ariaLabel={`Transfer ${index + 1} accounts`}
+                              value={row.accounts}
+                              className={transferTextClass(row.type)}
+                              onChange={(v) => updateTransfer(index, 'accounts', v)}
+                            />
+                            {prevRow && <DeltaHint current={row.accounts} previous={prevRow.accounts} />}
+                          </td>
+                          <td className="w-10 px-2 py-2">
+                            <button
+                              aria-label={`Delete transfer ${index + 1}`}
+                              onClick={() => setData({ ...data, transfers: data.transfers.filter((_, i) => i !== index) })}
+                              className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <button onClick={() => setData({ ...data, transfers: [...data.transfers, emptyTransfer()] })} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100">
               <Plus size={16} /> Add transfer
             </button>
@@ -1049,7 +1158,45 @@ export default function App() {
             <div className="space-y-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <h3 className="mb-2 text-sm font-semibold text-slate-900">Operational Checks</h3>
-                <SimpleFormGrid fields={commonFields} values={data.common} previousValues={prev?.common} setValues={(common) => setData({ ...data, common })} />
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-900" title={KYC_WAITING_BREAKDOWN_TOOLTIP}>
+                      Users Waiting for KYC Approval
+                      <span className="group relative inline-flex normal-case tracking-normal">
+                        <Info size={13} className="cursor-help opacity-70" aria-label={KYC_WAITING_BREAKDOWN_TOOLTIP} />
+                        <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition group-hover:opacity-100">
+                          {KYC_WAITING_BREAKDOWN_TOOLTIP}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
+                      <label className="block sm:col-span-2">
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">Users Waiting for KYC Approval</span>
+                        <NumberInput ariaLabel="Users Waiting for KYC Approval" value={data.common.kycWaiting} onChange={(v) => updateCommon({ kycWaiting: v })} />
+                        <p className="mt-1 text-[11px] text-slate-500">Non-SSN auto = Total - SSN</p>
+                        <div className="mt-1">
+                          <DeltaHint current={data.common.kycWaiting} previous={prev?.common?.kycWaiting} />
+                        </div>
+                      </label>
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">SSN</span>
+                        <NumberInput ariaLabel="KYC Waiting SSN" value={data.common.kycWaitingSsn} onChange={(v) => updateCommon({ kycWaitingSsn: v })} />
+                        <div className="mt-1">
+                          <DeltaHint current={data.common.kycWaitingSsn} previous={prev?.common?.kycWaitingSsn} />
+                        </div>
+                      </label>
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">Non-SSN</span>
+                        <NumberInput ariaLabel="KYC Waiting Non-SSN" value={data.common.kycWaitingNonSsn} readOnly />
+                        <p className="mt-1 text-[11px] text-slate-500">Auto: Total - SSN</p>
+                        <div className="mt-1">
+                          <DeltaHint current={data.common.kycWaitingNonSsn} previous={prev?.common?.kycWaitingNonSsn} />
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                  <SimpleFormGrid fields={commonSimpleFields} values={data.common} previousValues={prev?.common} setValues={(common) => setData({ ...data, common })} />
+                </div>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -1144,7 +1291,133 @@ export default function App() {
             </div>
           </Section>
 
-          <Section number="5" title="User UTM Tracking (Top 100)" subtitle="Edit, add, or remove rows as the UTM list changes">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className={`flex items-center justify-between border-b px-4 py-3 ${hasProductionFailedApis ? 'border-[#7f1d1d] bg-[#c40000]' : 'border-slate-200 bg-slate-50'}`}>
+              <div className="flex items-center gap-3">
+                <span className={`grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold ${hasProductionFailedApis ? 'bg-black text-white' : 'bg-blue-600 text-white'}`}>5</span>
+                <div>
+                  <h2 className={`text-sm font-bold ${hasProductionFailedApis ? 'text-white' : 'text-slate-900'}`}>Production Failed APIs</h2>
+                  <p className={`mt-0.5 text-xs ${hasProductionFailedApis ? 'text-red-100' : 'text-slate-500'}`}>Track production API failures and issue ownership</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-4">
+              {data.productionFailedApis.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm font-medium text-slate-500">
+                  No API errors today
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-[900px] w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
+                        {['API Name', 'Mussafa ID', 'Error Details', 'Issue Source', 'Reported At', 'Backup Date', 'Backup Time', ''].map((h, i) => (
+                          <th key={i} className="px-2 py-2.5 normal-case tracking-normal">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.productionFailedApis.map((row, index) => {
+                        const prevRow = prev?.productionFailedApis?.[index]
+                        const createdAtParts = parseCreatedAtParts(row.createdAt)
+                        return (
+                          <tr key={index} className="border-b border-slate-100 align-top">
+                            <td className="px-2 py-2">
+                              <input
+                                aria-label={`Production API ${index + 1} name`}
+                                value={row.apiName}
+                                onChange={(e) => updateProductionFailedApi(index, 'apiName', e.target.value)}
+                                className="w-full min-w-[180px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
+                              />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input
+                                aria-label={`Production API ${index + 1} user id`}
+                                value={row.userId}
+                                onChange={(e) => updateProductionFailedApi(index, 'userId', e.target.value)}
+                                className="w-full min-w-[150px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
+                              />
+                            </td>
+                            <td className="px-2 py-2">
+                              <textarea
+                                aria-label={`Production API ${index + 1} error`}
+                                value={row.error}
+                                onChange={(e) => updateProductionFailedApi(index, 'error', e.target.value)}
+                                rows={3}
+                                className="w-full min-w-[240px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-100"
+                              />
+                            </td>
+                            <td className="px-2 py-2">
+                              <select
+                                aria-label={`Production API ${index + 1} issue owner`}
+                                value={row.issueOwner}
+                                onChange={(e) => updateProductionFailedApi(index, 'issueOwner', e.target.value)}
+                                className="w-full min-w-[130px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
+                              >
+                                <option>User</option>
+                                <option>Our issue</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <input
+                                aria-label={`Production API ${index + 1} createdAt`}
+                                value={row.createdAt}
+                                onChange={(e) => updateProductionFailedApi(index, 'createdAt', e.target.value)}
+                                placeholder="2026-08-17 05:03:19"
+                                className="w-full min-w-[190px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
+                              />
+                              <div className="mt-1 text-[11px] text-slate-500">{formatCreatedAtDisplay(row.createdAt)}</div>
+                            </td>
+                            <td className="px-2 py-2">
+                              <input
+                                aria-label={`Production API ${index + 1} backup date`}
+                                type="date"
+                                value={createdAtParts.date}
+                                onChange={(e) => updateProductionFailedApi(index, 'createdAt', composeCreatedAt(e.target.value, createdAtParts.time))}
+                                className="w-full min-w-[140px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
+                              />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input
+                                aria-label={`Production API ${index + 1} backup time`}
+                                type="time"
+                                step="1"
+                                value={createdAtParts.time}
+                                onChange={(e) => updateProductionFailedApi(index, 'createdAt', composeCreatedAt(createdAtParts.date, e.target.value))}
+                                className="w-full min-w-[110px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
+                              />
+                            </td>
+                            <td className="w-10 px-2 py-2">
+                              <button
+                                aria-label={`Delete production API row ${index + 1}`}
+                                onClick={() => setData((old) => ({ ...old, productionFailedApis: old.productionFailedApis.filter((_, i) => i !== index) }))}
+                                className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <button
+                onClick={() => setData((old) => ({ ...old, productionFailedApis: [...old.productionFailedApis, emptyProductionFailedApi()] }))}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+              >
+                <Plus size={16} /> Add API row
+              </button>
+            </div>
+          </section>
+
+          <Section
+            number="6"
+            title="User UTM Tracking (Top 100)"
+            subtitle="Edit, add, or remove rows as the UTM list changes"
+            headerRight={<span className="rounded-full bg-[#E8FAF1] px-3 py-1.5 text-xs font-bold text-emerald-700">Total UTM: {display(utmTotal)} | Account Created: {display(utmCreatedTotal)}</span>}
+          >
             <div className="overflow-x-auto">
               <table className="min-w-[760px] w-full text-left text-sm">
                 <thead>
