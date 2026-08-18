@@ -616,6 +616,27 @@ function moneyCell(key, value) {
   return display(value, moneyKeys.has(key))
 }
 
+function buildSubscriptionHtml(subscription) {
+  const totalWarn = num(subscription.without) > 0
+  return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff;margin-top:10px">
+    <div style="padding:8px 12px;background:#edf3ff;border-bottom:1px solid #dbe3ef;font-size:11px;font-weight:700;color:#40506a;text-transform:uppercase">Users Without Subscription</div>
+    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="background:#f7f9fc">
+        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;font-weight:700;color:${totalWarn ? '#b42318' : '#0f4cce'}">Total</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-size:17px;font-weight:700;color:${totalWarn ? '#b42318' : '#0f4cce'}">${display(subscription.without)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px 8px 20px;border-bottom:1px solid #e4eaf2;color:#61708a">↳ Funded Users</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-weight:600">${display(subscription.funded)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px 10px 20px;color:#61708a">↳ Unfunded Users</td>
+        <td style="padding:8px 12px 10px;text-align:right;font-weight:600">${display(subscription.unfunded)}</td>
+      </tr>
+    </table>
+  </div>`
+}
+
 function buildCipReportHtml(cip) {
   const canSubmitWarn = num(cip.canSubmit) > 0
   const canSubmitRow = canSubmitWarn
@@ -689,7 +710,7 @@ function buildEmail(data, subject) {
   const html = `<div style="background:#f4f7fb;padding:20px 8px"><div style="${emailCss.wrap}"><div style="${emailCss.header}"><div style="font-size:24px;font-weight:700">Trading &amp; RIA Report</div><div style="font-size:13px;margin-top:7px;opacity:.9">${subject.replace('Trading & RIA Report - ', '')}</div></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">1. Latest Fund Transfers <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#61708a">(Last Two Days)</span></div>${data.transfers.length ? tableHtml(['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts'], data.transfers.map((r) => [formatLongDate(r.date), accountTypeCell(r.accountType), transferTypeCell(r.type), display(r.amount, true), display(r.accounts)]), ['', '', '', 'right', 'right']) : `<div style="padding:16px 12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;text-align:center;font-size:13px;font-weight:500">No cash deposit/withdrawal events found.</div>`}</div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">2. Trading User Stats</div>${metricCards([['Total Draft', display(data.trading.draft)], ['Account Created', display(data.trading.created)], ['Opened Today', display(data.trading.openToday)], ['Drafts Today', display(data.trading.draftsToday)]], '#0874e8', '26px', '11px')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:60%;vertical-align:top">${tableHtml(['Trading Report', 'Value'], tradingRows.slice(4), ['', 'right'])}</td><td style="width:40%;vertical-align:top">${buildAccountStatusHtml(accountFields, data.tradingAccount)}</td></tr></table></div>
-  <div style="${emailCss.section}"><div style="${emailCss.title};color:#7138dc">3. RIA User Stats</div>${metricCards([['Total Draft', display(data.ria.draft)], ['Account Created', display(data.ria.created)], ['Opened Today', display(data.ria.openToday)], ['Drafts Today', display(data.ria.draftsToday)]], '#7c3aed')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:52%;vertical-align:top">${tableHtml(['RIA Report', 'Value'], riaRows.slice(4), ['', 'right'])}</td><td style="width:48%;vertical-align:top">${tableHtml(['Account Status', 'Count'], accountStatusRows(riaAccountFields, data.riaAccount), ['', 'right'])}<div style="height:8px"></div>${tableHtml(['Users Without Subscription', 'Count'], [[emphasisLabel('Total'), display(data.subscription.without)], [emphasisLabel('Funded Users'), display(data.subscription.funded)], [emphasisLabel('Unfunded Users'), display(data.subscription.unfunded)]], ['', 'right'])}</td></tr></table></div>
+  <div style="${emailCss.section}"><div style="${emailCss.title};color:#7138dc">3. RIA User Stats</div>${metricCards([['Total Draft', display(data.ria.draft)], ['Account Created', display(data.ria.created)], ['Opened Today', display(data.ria.openToday)], ['Drafts Today', display(data.ria.draftsToday)]], '#7c3aed')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:52%;vertical-align:top">${tableHtml(['RIA Report', 'Value'], riaRows.slice(4), ['', 'right'])}</td><td style="width:48%;vertical-align:top">${tableHtml(['Account Status', 'Count'], accountStatusRows(riaAccountFields, data.riaAccount), ['', 'right'])}<div style="height:8px"></div>${buildSubscriptionHtml(data.subscription)}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">4. Common</div><table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0"><tr><td style="width:55%;vertical-align:top">${kycWaitingHtml}${commonHtml}</td><td style="width:45%;vertical-align:top">${cipHtml}${multiAccountsHtml}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">5. Production Failed APIs</div>${productionFailedApisHtml}</div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">6. User UTM Tracking (Top 100) <span style="float:right;background:#E8FAF1;color:#067647;padding:4px 10px;border-radius:999px;font-weight:700;text-transform:none;letter-spacing:0">Total UTM: ${display(utmTotal)} | Account Created: ${display(utmCreatedTotal)}</span></div>${tableHtml(['Source', 'Medium', 'Campaign', 'Total', 'In Drafts', 'Acc Created'], data.utm.map((r) => [r.source, r.medium, r.campaign, display(r.total), display(r.draft), display(r.created)]), ['', '', '', 'right', 'right', 'right'])}</div>
@@ -1036,7 +1057,6 @@ export default function App() {
                   </thead>
                   <tbody>
                     {data.transfers.map((row, index) => {
-                      const prevRow = prev?.transfers?.[index]
                       return (
                         <tr key={index} className={`border-b border-slate-100 align-top ${transferRowBg(row.type)}`}>
                           <td className="px-2 py-2">
@@ -1079,7 +1099,6 @@ export default function App() {
                               className={transferTextClass(row.type)}
                               onChange={(v) => updateTransfer(index, 'amount', v)}
                             />
-                            {prevRow && <DeltaHint current={row.amount} previous={prevRow.amount} money />}
                           </td>
                           <td className="w-24 px-2 py-2">
                             <NumberInput
@@ -1088,7 +1107,6 @@ export default function App() {
                               className={transferTextClass(row.type)}
                               onChange={(v) => updateTransfer(index, 'accounts', v)}
                             />
-                            {prevRow && <DeltaHint current={row.accounts} previous={prevRow.accounts} />}
                           </td>
                           <td className="w-10 px-2 py-2">
                             <button
@@ -1140,19 +1158,20 @@ export default function App() {
                   <label className="block sm:col-span-2">
                     <span className={`mb-2 block text-xs font-semibold ${num(data.subscription.without) > 0 ? 'text-red-700' : 'text-slate-600'}`}>Total</span>
                     <NumberInput ariaLabel="Total" value={data.subscription.without} className={`${num(data.subscription.without) > 0 ? 'border-red-200 bg-red-50 font-semibold text-red-700' : ''}`} onChange={(v) => updateSubscription({ without: v })} />
+                    <p className="mt-1 text-[11px] text-slate-500">= Funded Users + Unfunded Users</p>
                     <div className="mt-1">
                       <DeltaHint current={data.subscription.without} previous={prev?.subscription?.without} />
                     </div>
                   </label>
                   <label className="block">
-                    <span className="mb-2 block text-xs font-semibold text-slate-600">Funded Users</span>
+                    <span className="mb-2 block text-xs font-semibold text-slate-600">↳ Funded Users</span>
                     <NumberInput ariaLabel="Funded Users" value={data.subscription.funded} onChange={(v) => updateSubscription({ funded: v })} />
                     <div className="mt-1">
                       <DeltaHint current={data.subscription.funded} previous={prev?.subscription?.funded} />
                     </div>
                   </label>
                   <label className="block">
-                    <span className="mb-2 block text-xs font-semibold text-slate-600">Unfunded Users</span>
+                    <span className="mb-2 block text-xs font-semibold text-slate-600">↳ Unfunded Users</span>
                     <NumberInput ariaLabel="Unfunded Users" value={data.subscription.unfunded} readOnly />
                     <p className="mt-1 text-[11px] text-slate-500">Auto: Total − Funded</p>
                     <div className="mt-1">
