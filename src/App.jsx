@@ -227,6 +227,16 @@ function composeCreatedAt(date, time) {
   return time ? `${date} ${time}` : date
 }
 
+function maskEmail(value) {
+  const email = String(value || '').trim()
+  const [local, domain] = email.split('@')
+  if (!local || !domain) return email || '—'
+  const suffixLength = local.length <= 6 ? 1 : local.length > 8 ? 4 : 2
+  const prefixLength = local.length <= 6 ? 1 : Math.min(7, Math.max(2, local.length - suffixLength - 1))
+  const hiddenLength = Math.max(3, local.length - prefixLength - suffixLength)
+  return `${local.slice(0, prefixLength)}${'*'.repeat(hiddenLength)}${local.slice(local.length - suffixLength)}@${domain}`
+}
+
 function periodFor(time) {
   const parsed = parseTime12h(time)
   if (!parsed) return 'morning'
@@ -645,7 +655,7 @@ function buildProductionFailedApisHtml(rows) {
 
   const body = rows.map((row) => [
     row.apiName || '—',
-    row.userId || '—',
+    maskEmail(row.userId),
     row.error || '—',
     row.issueOwner || '—',
     formatCreatedAtDisplay(row.createdAt),
@@ -656,7 +666,7 @@ function buildProductionFailedApisHtml(rows) {
     <table role="presentation" style="${emailCss.table}">
       <thead>
         <tr>
-          ${['API Name', 'Mussafa ID', 'Error Details', 'Issue Source', 'Reported At'].map((h) => `<th style="${emailCss.th}">${h}</th>`).join('')}
+          ${['API Name', 'Email', 'Error Details', 'Issue Source', 'Reported At'].map((h) => `<th style="${emailCss.th}">${h}</th>`).join('')}
         </tr>
       </thead>
       <tbody>
@@ -1311,7 +1321,7 @@ export default function App() {
                   <table className="min-w-[900px] w-full text-left text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
-                        {['API Name', 'Mussafa ID', 'Error Details', 'Issue Source', 'Reported At', 'Backup Date', 'Backup Time', ''].map((h, i) => (
+                        {['API Name', 'Email', 'Error Details', 'Issue Source', 'Reported At', 'Backup Date', 'Backup Time', ''].map((h, i) => (
                           <th key={i} className="px-2 py-2.5 normal-case tracking-normal">{h}</th>
                         ))}
                       </tr>
@@ -1332,10 +1342,11 @@ export default function App() {
                             </td>
                             <td className="px-2 py-2">
                               <input
-                                aria-label={`Production API ${index + 1} user id`}
+                                aria-label={`Production API ${index + 1} email`}
                                 value={row.userId}
                                 onChange={(e) => updateProductionFailedApi(index, 'userId', e.target.value)}
-                                className="w-full min-w-[150px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
+                                placeholder="smart.hussain2006@gmail.com"
+                                className="w-full min-w-[190px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
                               />
                             </td>
                             <td className="px-2 py-2">
