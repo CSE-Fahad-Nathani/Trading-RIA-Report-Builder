@@ -549,24 +549,46 @@ function buildAccountStatusHtml(fields, values) {
   return `<table role="presentation" style="${emailCss.table}"><thead><tr><th style="${emailCss.th}">Account Status</th><th style="${emailCss.th};text-align:right">Count</th></tr></thead><tbody>${body}</tbody></table>`
 }
 
-function buildKycWaitingHtml(values) {
-  return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff;margin-bottom:10px">
-    <div style="padding:8px 12px;background:#edf3ff;border-bottom:1px solid #dbe3ef;font-size:11px;font-weight:700;color:#40506a;text-transform:uppercase">KYC Waiting</div>
-    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr style="background:#f7f9fc">
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;font-weight:700;color:#0f4cce">Users Waiting for KYC Approval</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-size:17px;font-weight:700;color:#0f4cce">${display(values.kycWaiting)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px 8px 20px;border-bottom:1px solid #e4eaf2;color:#61708a">↳ SSN</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-weight:600">${display(values.kycWaitingSsn)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px 10px 20px;color:#61708a">↳ Non-SSN</td>
-        <td style="padding:8px 12px 10px;text-align:right;font-weight:600">${display(values.kycWaitingNonSsn)}</td>
-      </tr>
-    </table>
-  </div>`
+function buildCommonGroupedHtml(common, cip, multiAccounts) {
+  const sectionHeader = (title, isFirst = false) => `<tr>
+    <td colspan="2" style="padding:8px 12px;background:#edf3ff;border-left:1px solid #dbe3ef;border-right:1px solid #dbe3ef;border-bottom:1px solid #dbe3ef;${isFirst ? 'border-top:1px solid #dbe3ef' : 'border-top:3px solid #94a3b8'};font-size:11px;font-weight:700;color:#40506a;text-transform:uppercase;letter-spacing:0.04em">${title}</td>
+  </tr>`
+
+  const canSubmitWarn = num(cip.canSubmit) > 0
+  const canSubmitRow = canSubmitWarn
+    ? panicAlertRow('Can Submit', panicValueHtml(display(cip.canSubmit)))
+    : `<tr>
+        <td style="${emailCss.td};font-weight:600">Can Submit</td>
+        <td style="${emailCss.td};text-align:right;font-weight:700">${display(cip.canSubmit)}</td>
+      </tr>`
+
+  const totalRow = (label, value) => `<tr style="background:#f7f9fc">
+    <td style="${emailCss.td};font-weight:700;color:#0f4cce">${label}</td>
+    <td style="${emailCss.td};text-align:right;font-size:17px;font-weight:700;color:#0f4cce">${display(value)}</td>
+  </tr>`
+
+  const subRow = (label, value) => `<tr>
+    <td style="padding:5px 12px 5px 18px;border-left:1px solid #dbe3ef;border-right:1px solid #dbe3ef;border-bottom:1px solid #dbe3ef;border-top:none;color:#61708a;font-size:12.5px;line-height:1.35">${label}</td>
+    <td style="padding:5px 12px;border-left:1px solid #dbe3ef;border-right:1px solid #dbe3ef;border-bottom:1px solid #dbe3ef;border-top:none;text-align:right;font-weight:600;font-size:12.5px;line-height:1.35">${display(value)}</td>
+  </tr>`
+
+  const body = [
+    sectionHeader('KYC Waiting', true),
+    totalRow('Users Waiting for KYC Approval', common.kycWaiting),
+    subRow('↳ SSN', common.kycWaitingSsn),
+    subRow('↳ Non-SSN', common.kycWaitingNonSsn),
+    sectionHeader('CIP'),
+    canSubmitRow,
+    totalRow('Total Submitted Today', cip.submittedToday),
+    subRow('↳ SSN CIP', cip.ssnToday),
+    subRow('↳ Non-SSN CIP', cip.nonSsnToday),
+    sectionHeader('Users with Multi Accounts'),
+    totalRow('Users with Multi Accounts', multiAccounts.total),
+    subRow('↳ Trading → <span style="color:#067647;font-weight:700">RIA</span>', multiAccounts.tradingToRia),
+    subRow('↳ RIA → <span style="color:#067647;font-weight:700">Trading</span>', multiAccounts.riaToTrading),
+  ].join('')
+
+  return `<table role="presentation" style="${emailCss.table}"><thead><tr><th style="${emailCss.th}">Check</th><th style="${emailCss.th};text-align:right">Count</th></tr></thead><tbody>${body}</tbody></table>`
 }
 
 function buildCommonChecksHtml(values) {
@@ -585,30 +607,6 @@ function buildCommonChecksHtml(values) {
     })
     .join('')
   return `<table role="presentation" style="${emailCss.table}"><thead><tr><th style="${emailCss.th}">Check</th><th style="${emailCss.th};text-align:right">Count</th></tr></thead><tbody>${body}</tbody></table>`
-}
-
-function buildMultiAccountsHtml(multiAccounts) {
-  return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff;margin-top:10px">
-    <div style="padding:8px 12px;background:#edf3ff;border-bottom:1px solid #dbe3ef;font-size:13px;font-weight:700;color:#182230;text-transform:uppercase">Users with Multi Accounts</div>
-    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr style="background:#f7f9fc">
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;font-weight:700;color:#0f4cce">Users with Multi Accounts</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-size:17px;font-weight:700;color:#0f4cce">${display(multiAccounts.total)}</td>
-      </tr>
-      <tr>
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;font-weight:600;color:#40506a">Account Order</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;text-align:right;color:#94a3b8"></td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px 8px 20px;border-bottom:1px solid #e4eaf2;color:#61708a">↳ Trading → <span style="color:#067647;font-weight:700">RIA</span></td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-weight:600">${display(multiAccounts.tradingToRia)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px 10px 20px;color:#61708a">↳ RIA → <span style="color:#067647;font-weight:700">Trading</span></td>
-        <td style="padding:8px 12px 10px;text-align:right;font-weight:600">${display(multiAccounts.riaToTrading)}</td>
-      </tr>
-    </table>
-  </div>`
 }
 
 function moneyCell(key, value) {
@@ -632,35 +630,6 @@ function buildSubscriptionHtml(subscription) {
       <tr>
         <td style="padding:8px 12px 10px 20px;color:#61708a">↳ Unfunded Users</td>
         <td style="padding:8px 12px 10px;text-align:right;font-weight:600">${display(subscription.unfunded)}</td>
-      </tr>
-    </table>
-  </div>`
-}
-
-function buildCipReportHtml(cip) {
-  const canSubmitWarn = num(cip.canSubmit) > 0
-  const canSubmitRow = canSubmitWarn
-    ? panicAlertRow('Can Submit', panicValueHtml(display(cip.canSubmit)))
-    : `<tr style="background:#ffffff">
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;font-weight:600;color:#40506a">Can Submit</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-weight:700;color:#182230">${display(cip.canSubmit)}</td>
-      </tr>`
-
-  return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff">
-    <div style="padding:8px 12px;background:#edf3ff;border-bottom:1px solid #dbe3ef;font-size:11px;font-weight:700;color:#40506a;text-transform:uppercase">CIP</div>
-    <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px">
-      ${canSubmitRow}
-      <tr style="background:#f7f9fc">
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;font-weight:700;color:#0f4cce">Total Submitted Today</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-size:17px;font-weight:700;color:#0f4cce">${display(cip.submittedToday)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px 8px 20px;border-bottom:1px solid #e4eaf2;color:#61708a">↳ SSN CIP</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e4eaf2;text-align:right;font-weight:600">${display(cip.ssnToday)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 12px 10px 20px;color:#61708a">↳ Non-SSN CIP</td>
-        <td style="padding:8px 12px 10px;text-align:right;font-weight:600">${display(cip.nonSsnToday)}</td>
       </tr>
     </table>
   </div>`
@@ -699,9 +668,7 @@ function buildProductionFailedApisHtml(rows) {
 
 function buildEmail(data, subject) {
   const commonHtml = buildCommonChecksHtml(data.common)
-  const kycWaitingHtml = buildKycWaitingHtml(data.common)
-  const multiAccountsHtml = buildMultiAccountsHtml(data.multiAccounts)
-  const cipHtml = buildCipReportHtml(data.cip)
+  const commonGroupedHtml = buildCommonGroupedHtml(data.common, data.cip, data.multiAccounts)
   const productionFailedApisHtml = buildProductionFailedApisHtml(data.productionFailedApis || [])
   const tradingRows = tradingFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, moneyCell(key, data.trading[key])])
   const riaRows = riaFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, key === 'portfolioCheck' ? warningCell(key, data.ria[key]) : moneyCell(key, data.ria[key])])
@@ -711,7 +678,7 @@ function buildEmail(data, subject) {
   <div style="${emailCss.section}"><div style="${emailCss.title}">1. Latest Fund Transfers <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#61708a">(Last Two Days)</span></div>${data.transfers.length ? tableHtml(['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts'], data.transfers.map((r) => [formatLongDate(r.date), accountTypeCell(r.accountType), transferTypeCell(r.type), display(r.amount, true), display(r.accounts)]), ['', '', '', 'right', 'right']) : `<div style="padding:16px 12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;text-align:center;font-size:13px;font-weight:500">No cash deposit/withdrawal events found.</div>`}</div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">2. Trading User Stats</div>${metricCards([['Total Draft', display(data.trading.draft)], ['Account Created', display(data.trading.created)], ['Opened Today', display(data.trading.openToday)], ['Drafts Today', display(data.trading.draftsToday)]], '#0874e8', '26px', '11px')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:60%;vertical-align:top">${tableHtml(['Trading Report', 'Value'], tradingRows.slice(4), ['', 'right'])}</td><td style="width:40%;vertical-align:top">${buildAccountStatusHtml(accountFields, data.tradingAccount)}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title};color:#7138dc">3. RIA User Stats</div>${metricCards([['Total Draft', display(data.ria.draft)], ['Account Created', display(data.ria.created)], ['Opened Today', display(data.ria.openToday)], ['Drafts Today', display(data.ria.draftsToday)]], '#7c3aed')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:52%;vertical-align:top">${tableHtml(['RIA Report', 'Value'], riaRows.slice(4), ['', 'right'])}</td><td style="width:48%;vertical-align:top">${tableHtml(['Account Status', 'Count'], accountStatusRows(riaAccountFields, data.riaAccount), ['', 'right'])}<div style="height:8px"></div>${buildSubscriptionHtml(data.subscription)}</td></tr></table></div>
-  <div style="${emailCss.section}"><div style="${emailCss.title}">4. Common</div><table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0"><tr><td style="width:55%;vertical-align:top">${kycWaitingHtml}${commonHtml}</td><td style="width:45%;vertical-align:top">${cipHtml}${multiAccountsHtml}</td></tr></table></div>
+  <div style="${emailCss.section}"><div style="${emailCss.title}">4. Common</div><table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0"><tr><td style="width:55%;vertical-align:top">${commonHtml}</td><td style="width:45%;vertical-align:top">${commonGroupedHtml}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">5. Production Failed APIs</div>${productionFailedApisHtml}</div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">6. User UTM Tracking (Top 100) <span style="float:right;background:#E8FAF1;color:#067647;padding:4px 10px;border-radius:999px;font-weight:700;text-transform:none;letter-spacing:0">Total UTM: ${display(utmTotal)} | Account Created: ${display(utmCreatedTotal)}</span></div>${tableHtml(['Source', 'Medium', 'Campaign', 'Total', 'In Drafts', 'Acc Created'], data.utm.map((r) => [r.source, r.medium, r.campaign, display(r.total), display(r.draft), display(r.created)]), ['', '', '', 'right', 'right', 'right'])}</div>
   </div></div>`
