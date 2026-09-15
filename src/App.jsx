@@ -623,6 +623,12 @@ function buildCommonChecksHtml(values) {
           <td style="${panicCellStyles('right')}">${panicValueHtml(display(val))}</td>
         </tr>`
       }
+      if (key === 'tradeCron' && num(val) > 0) {
+        return `<tr>
+          <td style="padding:9px;border:1px solid #dbe3ef;background:#E8FAF1;vertical-align:top;font-weight:700;color:#067647">${reportLabel}</td>
+          <td style="padding:9px;border:1px solid #dbe3ef;background:#E8FAF1;vertical-align:top;text-align:right;font-weight:800;color:#066042;font-variant-numeric:tabular-nums">${display(val)}</td>
+        </tr>`
+      }
       return `<tr><td style="${emailCss.td}">${reportLabel}</td><td style="${emailCss.td};text-align:right">${warningCell(key, val)}</td></tr>`
     })
     .join('')
