@@ -32,27 +32,17 @@ function parseTime12h(time) {
 }
 
 const emptyTransfer = () => ({ date: '', accountType: '', type: 'Deposit', amount: '0', accounts: '0' })
-const emptyUtmRow = () => ({ source: '', medium: '', campaign: '', total: '0', draft: '0', created: '0' })
-const emptyProductionFailedApi = () => ({ apiName: '', userId: '', error: '', issueOwner: 'User', createdAt: '' })
-
-const fixedUtmRows = [
-  { source: 'musaffa_mobile_app', medium: '—', campaign: '—', total: '118', draft: '44', created: '20' },
-  { source: 'website', medium: 'popup', campaign: 'MP_Popup_DB_Web', total: '18', draft: '1', created: '0' },
-  { source: 'app', medium: 'popup', campaign: 'MP_Popup_In-app', total: '8', draft: '3', created: '1' },
-  { source: 'email', medium: 'mpemail', campaign: 'usactivestockviewed', total: '4', draft: '1', created: '1' },
-  { source: 'email', medium: 'mpemail', campaign: 'uspaidusers', total: '2', draft: '1', created: '1' },
-  { source: 'musaffa_mobile_app', medium: 'general_popup', campaign: '6_years_free_trading', total: '1', draft: '0', created: '0' },
-  { source: 'Webinar', medium: '16Jul', campaign: 'SD_Webinar', total: '1', draft: '1', created: '0' },
-  { source: 'website', medium: 'web-popup', campaign: 'mp', total: '1', draft: '0', created: '0' },
-]
+const emptyProductionFailedApi = () => ({ apiName: '', userId: '', logId: '', error: '', issueOwner: 'User', createdAt: '', repeatCount: '1', userScope: 'Same user' })
 
 const commonFields = [
   ['kycWaiting', 'Users Waiting for KYC Approval'],
   ['kycWaitingSsn', 'SSN'],
   ['kycWaitingNonSsn', 'Non-SSN'],
   ['riaPortfolioChangeRequests', 'RIA Portfolio Change Requests'],
+  ['switchRiaUsersPortfolio', 'switch_ria_users_portfolio'],
   ['signupErrors', 'Users with Account Errors'],
   ['w8ben', 'W8BEN Not Submitted'],
+  ['w9', 'W9 Not Submitted'],
   ['tradeCron', 'send_trade_confirmation [Cron]'],
   ['duplicateAlpaca', 'Duplicate Alpaca Accounts [Cron]'],
   ['duplicateDrafts', 'Duplicate Drafts (Multiple Account Risk)'],
@@ -67,26 +57,43 @@ const cipFields = [
   ['nonSsnToday', 'Total Non-SSN CIP Submitted Today'],
 ]
 
-const tradingFields = [
+const tradingCoreFields = [
   ['draft', 'Total Draft'],
   ['created', 'Alpaca Account Created'],
   ['openToday', 'Alpaca Accounts Open Today'],
   ['draftsToday', 'Drafts Open Today'],
+]
+
+const fundFields = [
   ['totalFund', 'Total fund'],
   ['maxFund', 'Max portfolio'],
   ['fundedUsers', 'Total Funded users'],
 ]
 
-const riaFields = [
-  ...tradingFields,
-  ['portfolioCheck', 'ria_portfolio_check'],
+const tradingFields = [...tradingCoreFields, ...fundFields]
+
+const riaCoreFields = [...tradingCoreFields, ['portfolioCheck', 'ria_portfolio_check']]
+
+const riaFields = [...tradingFields, ['portfolioCheck', 'ria_portfolio_check']]
+
+const riaLhsReportFields = [...tradingCoreFields]
+
+const cronCommonFields = [
+  ['duplicateAlpaca', 'Duplicate Alpaca Accounts [Cron]'],
+  ['tradeCron', 'send_trade_confirmation [Cron]'],
+  ['switchRiaUsersPortfolio', 'switch_ria_users_portfolio'],
 ]
+
+const cronCommonKeys = new Set(cronCommonFields.map(([key]) => key))
+
+const portfolioCheckField = [['portfolioCheck', 'ria_portfolio_check']]
 
 const accountFields = [
   ['active', 'Active'],
   ['approved', 'Approved'],
   ['rejected', 'Rejected'],
   ['closed', 'Acc. Closed'],
+  ['updated', 'Acc. Updated'],
 ]
 
 const riaAccountFields = [
@@ -102,7 +109,7 @@ const initialState = () => ({
   multiAccounts: { total: '0', tradingToRia: '0', riaToTrading: '0' },
   cip: emptyObject(cipFields),
   productionFailedApis: [emptyProductionFailedApi()],
-  utm: fixedUtmRows.map((row) => ({ ...row })),
+  utm: { total: '0', created: '0' },
   trading: emptyObject(tradingFields),
   tradingAccount: emptyObject(accountFields),
   ria: emptyObject(riaFields),
@@ -111,10 +118,10 @@ const initialState = () => ({
 })
 
 const moneyKeys = new Set(['totalFund', 'maxFund'])
-const warningCommon = new Set(['signupErrors', 'w8ben', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios'])
+const warningCommon = new Set(['signupErrors', 'w8ben', 'w9', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios', 'switchRiaUsersPortfolio'])
 const warningKeys = new Set([...warningCommon, 'canSubmit', 'portfolioCheck', 'without'])
 const greenMoneyKeys = new Set(['totalFund', 'maxFund'])
-const panicKeys = new Set(['riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios', 'closed', 'canSubmit'])
+const panicKeys = new Set(['riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'w9', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios', 'closed', 'canSubmit', 'switchRiaUsersPortfolio'])
 // "Panic Alert" — clean premium card with red dot + accent count. Trigger: value > 0.
 
 function isPanicAlert(key, value) {
@@ -152,7 +159,7 @@ const panicFormTone = {
   input: 'font-bold text-white',
 }
 
-const panicBlackTextKeys = new Set(['closed', 'riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'canSubmit'])
+const panicBlackTextKeys = new Set(['closed', 'riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'w9', 'canSubmit', 'switchRiaUsersPortfolio'])
 
 function panicInputClass(key) {
   return panicBlackTextKeys.has(key)
@@ -168,17 +175,18 @@ function panicFormToneFor(key) {
 }
 
 const fieldTooltips = {
-  tradeCron: 'CRON 14: send_trade_confirmation',
-  duplicateAlpaca: 'CRON 12: duplicate_alpaca_accounts',
+  tradeCron: 'CRON 15: send_trade_confirmation',
+  duplicateAlpaca: 'CRON 13: duplicate_alpaca_accounts',
   riaPortfolioChangeRequests: '3rd last table',
+  switchRiaUsersPortfolio: 'CRON 17: switch_ria_users_portfolio',
   duplicateDrafts: '2nd last table',
   duplicateEmails: 'Last table',
   inactivePortfolios: '5th last table',
-  portfolioCheck: 'CRON 13: ria_portfolio_check',
+  portfolioCheck: 'CRON 14: ria_portfolio_check',
 }
 
 const MULTI_ACCOUNTS_TOOLTIP = '2nd table: Users with Multi Accounts'
-const CIP_TOOLTIP = 'CRON 9: submit_pending_cip'
+const CIP_TOOLTIP = 'CRON 10: submit_pending_cip'
 const KYC_WAITING_BREAKDOWN_TOOLTIP = 'KYC waiting count split by SSN and Non-SSN'
 
 const commonReportLabels = {
@@ -315,7 +323,15 @@ function normalizeLoaded(raw) {
     multiAccounts: { ...base.multiAccounts, ...(raw.multiAccounts || {}) },
     cip: { ...base.cip, ...(raw.cip || {}) },
     productionFailedApis: Array.isArray(raw.productionFailedApis) && raw.productionFailedApis.length ? raw.productionFailedApis.map((row) => ({ ...emptyProductionFailedApi(), ...row })) : [],
-    utm: Array.isArray(raw.utm) ? base.utm.map((row, i) => ({ ...row, ...(raw.utm[i] || {}) })) : base.utm,
+    utm: (() => {
+      if (Array.isArray(raw.utm)) {
+        return {
+          total: String(raw.utm.reduce((sum, row) => sum + num(row.total), 0)),
+          created: String(raw.utm.reduce((sum, row) => sum + num(row.created), 0)),
+        }
+      }
+      return { ...base.utm, ...(raw.utm || {}) }
+    })(),
     trading: { ...base.trading, ...(raw.trading || {}) },
     tradingAccount: { ...base.tradingAccount, ...(raw.tradingAccount || {}) },
     ria: { ...base.ria, ...(raw.ria || {}) },
@@ -488,7 +504,7 @@ function tableHtml(headers, rows, align = [], thExtra = '') {
   return `<table role="presentation" style="${emailCss.table}"><thead><tr>${headers.map((h, i) => `<th style="${emailCss.th};${thExtra};${align[i] === 'right' ? 'text-align:right' : ''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell, i) => `<td style="${emailCss.td};${align[i] === 'right' ? 'text-align:right' : ''}">${cell}</td>`).join('')}</tr>`).join('')}</tbody></table>`
 }
 
-const emphasisReportKeys = new Set(['totalFund', 'maxFund', 'fundedUsers', 'active', 'approved', 'rejected'])
+const emphasisReportKeys = new Set(['totalFund', 'maxFund', 'fundedUsers', 'active', 'approved', 'rejected', 'updated'])
 
 function emphasisLabel(label) {
   return `<span style="font-weight:600">${label}</span>`
@@ -521,20 +537,24 @@ function accountTypeCell(accountType) {
 }
 
 function statusCell(key, value) {
-  if (key === 'active' || key === 'approved') return `<span style="display:inline-block;background:#E8FAF1;color:#067647;padding:3px 8px;border-radius:10px;font-weight:700">${display(value)}</span>`
+  if (key === 'active' || key === 'approved' || key === 'updated') return `<span style="display:inline-block;background:#E8FAF1;color:#067647;padding:3px 8px;border-radius:10px;font-weight:700">${display(value)}</span>`
   if (key === 'rejected') return `<span style="display:inline-block;background:#FFF0F3;color:#b42318;padding:3px 8px;border-radius:10px;font-weight:700">${display(value)}</span>`
   return display(value)
 }
 
+function hideIfZeroAccountKeys(key) {
+  return key === 'approved' || key === 'updated'
+}
+
 function accountStatusRows(fields, values) {
   return fields
-    .filter(([key]) => key !== 'approved' || num(values[key]) > 0)
+    .filter(([key]) => !hideIfZeroAccountKeys(key) || num(values[key]) > 0)
     .map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, statusCell(key, values[key])])
 }
 
 function buildAccountStatusHtml(fields, values) {
   const body = fields
-    .filter(([key]) => key !== 'approved' || num(values[key]) > 0)
+    .filter(([key]) => !hideIfZeroAccountKeys(key) || num(values[key]) > 0)
     .map(([key, label]) => {
       const val = values[key]
       if (key === 'closed' && num(val) > 0) {
@@ -643,27 +663,66 @@ function buildProductionFailedApisHtml(rows) {
     </div>`
   }
 
-  const body = rows.map((row) => [
-    row.apiName || '—',
-    maskEmail(row.userId),
-    row.error || '—',
-    row.issueOwner || '—',
-    formatCreatedAtDisplay(row.createdAt),
-  ])
+  const cards = rows.map((row) => {
+    const issue = row.issueOwner || '—'
+    const issueBg = issue === 'Our issue' ? '#FFF0F3' : '#E8FAF1'
+    const issueColor = issue === 'Our issue' ? '#b42318' : '#067647'
+    const repeatCount = num(row.repeatCount)
+    const repeats = repeatCount <= 1
+      ? `${display(row.repeatCount || '1')}×`
+      : `${display(row.repeatCount)}× · ${row.userScope || 'Same user'}`
+    const metaRows = [
+      ['Email', maskEmail(row.userId)],
+      row.logId ? ['Log ID', row.logId] : null,
+      ['Repeats', repeats],
+      ['Reported At', formatCreatedAtDisplay(row.createdAt)],
+    ].filter(Boolean)
 
-  return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff">
-    <div style="padding:8px 12px;background:#c40000;border-bottom:1px solid #7f1d1d;font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase">Production Failed APIs</div>
-    <table role="presentation" style="${emailCss.table}">
-      <thead>
+    return `<div style="border:1px solid #dbe3ef;border-radius:10px;overflow:hidden;background:#ffffff;margin-bottom:10px">
+      <table role="presentation" style="width:100%;border-collapse:collapse">
         <tr>
-          ${['API Name', 'Email', 'Error Details', 'Issue Source', 'Reported At'].map((h) => `<th style="${emailCss.th}">${h}</th>`).join('')}
+          <td style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e4eaf2;font-size:14px;font-weight:700;color:#182230;vertical-align:middle">${row.apiName || 'Untitled API'}</td>
+          <td style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e4eaf2;text-align:right;vertical-align:middle;white-space:nowrap">
+            <span style="display:inline-block;background:${issueBg};color:${issueColor};padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700">${issue}</span>
+          </td>
         </tr>
-      </thead>
-      <tbody>
-        ${body.map((row) => `<tr>${row.map((cell) => `<td style="${emailCss.td}">${cell}</td>`).join('')}</tr>`).join('')}
-      </tbody>
-    </table>
+      </table>
+      <table role="presentation" style="width:100%;border-collapse:collapse;font-size:12px">
+        ${metaRows.map(([label, value]) => `<tr>
+          <td style="padding:6px 12px;width:96px;color:#61708a;border-bottom:1px solid #eef2f7;vertical-align:top">${label}</td>
+          <td style="padding:6px 12px;color:#182230;border-bottom:1px solid #eef2f7;font-weight:600;vertical-align:top;word-break:break-word">${value}</td>
+        </tr>`).join('')}
+        <tr>
+          <td style="padding:8px 12px;width:96px;color:#61708a;vertical-align:top">Error</td>
+          <td style="padding:8px 12px;color:#334155;vertical-align:top;white-space:pre-wrap;word-break:break-word">${row.error || '—'}</td>
+        </tr>
+      </table>
+    </div>`
+  }).join('')
+
+  return `<div>
+    <div style="padding:8px 12px;background:#c40000;border:1px solid #7f1d1d;border-radius:10px;font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;margin-bottom:10px">Production Failed APIs</div>
+    ${cards}
   </div>`
+}
+
+function buildUtmSummaryHtml(utm) {
+  const total = display(utm?.total ?? '0')
+  const created = display(utm?.created ?? '0')
+  return `<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0">
+    <tr>
+      <td style="width:50%;padding:18px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;vertical-align:top">
+        <div style="font-size:11px;font-weight:700;color:#067647;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Total UTM</div>
+        <div style="font-size:32px;font-weight:800;color:#066042;line-height:1;font-variant-numeric:tabular-nums">${total}</div>
+        <div style="margin-top:8px;font-size:12px;color:#3f8f6b">Tracked UTM entries (Top 100)</div>
+      </td>
+      <td style="width:50%;padding:18px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;vertical-align:top">
+        <div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Account Created</div>
+        <div style="font-size:32px;font-weight:800;color:#1e40af;line-height:1;font-variant-numeric:tabular-nums">${created}</div>
+        <div style="margin-top:8px;font-size:12px;color:#3b82f6">Accounts created from UTM</div>
+      </td>
+    </tr>
+  </table>`
 }
 
 function buildEmail(data, subject) {
@@ -672,15 +731,14 @@ function buildEmail(data, subject) {
   const productionFailedApisHtml = buildProductionFailedApisHtml(data.productionFailedApis || [])
   const tradingRows = tradingFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, moneyCell(key, data.trading[key])])
   const riaRows = riaFields.map(([key, label]) => [emphasisReportKeys.has(key) ? emphasisLabel(label) : label, key === 'portfolioCheck' ? warningCell(key, data.ria[key]) : moneyCell(key, data.ria[key])])
-  const utmTotal = data.utm.reduce((sum, row) => sum + num(row.total), 0)
-  const utmCreatedTotal = data.utm.reduce((sum, row) => sum + num(row.created), 0)
+  const utmSummaryHtml = buildUtmSummaryHtml(data.utm)
   const html = `<div style="background:#f4f7fb;padding:20px 8px"><div style="${emailCss.wrap}"><div style="${emailCss.header}"><div style="font-size:24px;font-weight:700">Trading &amp; RIA Report</div><div style="font-size:13px;margin-top:7px;opacity:.9">${subject.replace('Trading & RIA Report - ', '')}</div></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">1. Latest Fund Transfers <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#61708a">(Last Two Days)</span></div>${data.transfers.length ? tableHtml(['Date', 'Account Type', 'Type', 'Total Amount', 'Accounts'], data.transfers.map((r) => [formatLongDate(r.date), accountTypeCell(r.accountType), transferTypeCell(r.type), display(r.amount, true), display(r.accounts)]), ['', '', '', 'right', 'right']) : `<div style="padding:16px 12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;text-align:center;font-size:13px;font-weight:500">No cash deposit/withdrawal events found.</div>`}</div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">2. Trading User Stats</div>${metricCards([['Total Draft', display(data.trading.draft)], ['Account Created', display(data.trading.created)], ['Opened Today', display(data.trading.openToday)], ['Drafts Today', display(data.trading.draftsToday)]], '#0874e8', '26px', '11px')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:60%;vertical-align:top">${tableHtml(['Trading Report', 'Value'], tradingRows.slice(4), ['', 'right'])}</td><td style="width:40%;vertical-align:top">${buildAccountStatusHtml(accountFields, data.tradingAccount)}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title};color:#7138dc">3. RIA User Stats</div>${metricCards([['Total Draft', display(data.ria.draft)], ['Account Created', display(data.ria.created)], ['Opened Today', display(data.ria.openToday)], ['Drafts Today', display(data.ria.draftsToday)]], '#7c3aed')}<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 8px"><tr><td style="width:52%;vertical-align:top">${tableHtml(['RIA Report', 'Value'], riaRows.slice(4), ['', 'right'])}</td><td style="width:48%;vertical-align:top">${tableHtml(['Account Status', 'Count'], accountStatusRows(riaAccountFields, data.riaAccount), ['', 'right'])}<div style="height:8px"></div>${buildSubscriptionHtml(data.subscription)}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">4. Common</div><table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 0"><tr><td style="width:55%;vertical-align:top">${commonHtml}</td><td style="width:45%;vertical-align:top">${commonGroupedHtml}</td></tr></table></div>
   <div style="${emailCss.section}"><div style="${emailCss.title}">5. Production Failed APIs</div>${productionFailedApisHtml}</div>
-  <div style="${emailCss.section}"><div style="${emailCss.title}">6. User UTM Tracking (Top 100) <span style="float:right;background:#E8FAF1;color:#067647;padding:4px 10px;border-radius:999px;font-weight:700;text-transform:none;letter-spacing:0">Total UTM: ${display(utmTotal)} | Account Created: ${display(utmCreatedTotal)}</span></div>${tableHtml(['Source', 'Medium', 'Campaign', 'Total', 'In Drafts', 'Acc Created'], data.utm.map((r) => [r.source, r.medium, r.campaign, display(r.total), display(r.draft), display(r.created)]), ['', '', '', 'right', 'right', 'right'])}</div>
+  <div style="${emailCss.section}"><div style="${emailCss.title}">6. User UTM Tracking (Top 100)</div>${utmSummaryHtml}</div>
   </div></div>`
   return { html, text: `${subject}\n\nPlease view the formatted HTML report in this email.` }
 }
@@ -730,13 +788,13 @@ export default function App() {
   const subject = useMemo(() => subjectFor(date, time), [date, time])
   const email = useMemo(() => buildEmail(data, subject), [data, subject])
   const prev = previous?.data
-  const commonSimpleFields = commonFields.filter(([key]) => !['kycWaiting', 'kycWaitingSsn', 'kycWaitingNonSsn'].includes(key))
+  const commonSimpleFields = commonFields.filter(([key]) => !['kycWaiting', 'kycWaitingSsn', 'kycWaitingNonSsn'].includes(key) && !cronCommonKeys.has(key))
   const hasProductionFailedApis = data.productionFailedApis.length > 0
-  const utmTotal = data.utm.reduce((sum, row) => sum + num(row.total), 0)
-  const utmCreatedTotal = data.utm.reduce((sum, row) => sum + num(row.created), 0)
+  const utmTotal = data.utm?.total ?? '0'
+  const utmCreatedTotal = data.utm?.created ?? '0'
 
   const updateTransfer = (index, key, value) => setData((old) => ({ ...old, transfers: old.transfers.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }))
-  const updateUtm = (index, key, value) => setData((old) => ({ ...old, utm: old.utm.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }))
+  const updateUtm = (patch) => setData((old) => ({ ...old, utm: { ...old.utm, ...patch } }))
   const updateProductionFailedApi = (index, key, value) => setData((old) => ({ ...old, productionFailedApis: old.productionFailedApis.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }))
   const updateCommon = (patch) => {
     setData((old) => {
@@ -1100,7 +1158,7 @@ export default function App() {
             <div className="space-y-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <h3 className="mb-2 text-sm font-semibold text-slate-900">Trading Report</h3>
-                <SimpleFormGrid fields={tradingFields} values={data.trading} previousValues={prev?.trading} setValues={(trading) => setData({ ...data, trading })} />
+                <SimpleFormGrid fields={tradingCoreFields} values={data.trading} previousValues={prev?.trading} setValues={(trading) => setData({ ...data, trading })} />
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <h3 className="mb-2 text-sm font-semibold text-slate-900">Account Status</h3>
@@ -1113,7 +1171,7 @@ export default function App() {
             <div className="space-y-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <h3 className="mb-2 text-sm font-semibold text-slate-900">RIA Report</h3>
-                <SimpleFormGrid fields={riaFields} values={data.ria} previousValues={prev?.ria} setValues={(ria) => setData({ ...data, ria })} />
+                <SimpleFormGrid fields={riaLhsReportFields} values={data.ria} previousValues={prev?.ria} setValues={(ria) => setData({ ...data, ria })} />
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <h3 className="mb-2 text-sm font-semibold text-slate-900">Account Status</h3>
@@ -1145,6 +1203,20 @@ export default function App() {
                       <DeltaHint current={data.subscription.unfunded} previous={prev?.subscription?.unfunded} />
                     </div>
                   </label>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-slate-900">Total Fund / Portfolio</h3>
+                <p className="mb-3 text-xs text-slate-500">Trading &amp; RIA fund fields are entered together — same place in the source report.</p>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-lg border border-blue-100 bg-white p-3">
+                    <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-blue-700">Trading</h4>
+                    <SimpleFormGrid fields={fundFields} values={data.trading} previousValues={prev?.trading} setValues={(trading) => setData({ ...data, trading })} columns="sm:grid-cols-1" />
+                  </div>
+                  <div className="rounded-lg border border-purple-100 bg-white p-3">
+                    <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-purple-700">RIA</h4>
+                    <SimpleFormGrid fields={fundFields} values={data.ria} previousValues={prev?.ria} setValues={(ria) => setData({ ...data, ria })} columns="sm:grid-cols-1" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1196,48 +1268,83 @@ export default function App() {
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-900" title={CIP_TOOLTIP}>
-                  CIP
-                  <span className="group relative inline-flex normal-case tracking-normal">
-                    <Info size={13} className="cursor-help opacity-70" aria-label={CIP_TOOLTIP} />
-                    <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition group-hover:opacity-100">
-                      {CIP_TOOLTIP}
-                    </span>
-                  </span>
-                </h3>
-                <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
-                  <label className="block sm:col-span-2">
-                    <span className={`mb-2 flex items-center gap-2 text-xs font-semibold ${canSubmitTone.label}`}>
-                      {canSubmitAlert && <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" aria-hidden />}
-                      Can Submit
-                    </span>
-                    <NumberInput ariaLabel="Can Submit" value={data.cip.canSubmit} className={`${canSubmitAlert ? panicInputClass('canSubmit') : ''} ${canSubmitTone.input}`.trim()} onChange={(v) => updateCip({ canSubmit: v })} />
-                    <div className="mt-1">
-                      <DeltaHint current={data.cip.canSubmit} previous={prev?.cip?.canSubmit} />
+                <h3 className="mb-1 text-sm font-semibold text-slate-900">CRON Jobs</h3>
+                <p className="mb-3 text-xs text-slate-500">All CRON-related values in one place for faster entry.</p>
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-900" title={CIP_TOOLTIP}>
+                      CIP
+                      <span className="group relative inline-flex normal-case tracking-normal">
+                        <Info size={13} className="cursor-help opacity-70" aria-label={CIP_TOOLTIP} />
+                        <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition group-hover:opacity-100">
+                          {CIP_TOOLTIP}
+                        </span>
+                      </span>
+                    </h4>
+                    <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
+                      <label className="block sm:col-span-2">
+                        <span className={`mb-2 flex items-center gap-2 text-xs font-semibold ${canSubmitTone.label}`}>
+                          {canSubmitAlert && <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" aria-hidden />}
+                          Can Submit
+                        </span>
+                        <NumberInput ariaLabel="Can Submit" value={data.cip.canSubmit} className={`${canSubmitAlert ? panicInputClass('canSubmit') : ''} ${canSubmitTone.input}`.trim()} onChange={(v) => updateCip({ canSubmit: v })} />
+                        <div className="mt-1">
+                          <DeltaHint current={data.cip.canSubmit} previous={prev?.cip?.canSubmit} />
+                        </div>
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">Total Submitted Today</span>
+                        <NumberInput ariaLabel="Total Submitted Today" value={data.cip.submittedToday} readOnly />
+                        <p className="mt-1 text-[11px] text-slate-500">= SSN CIP + Non-SSN CIP</p>
+                        <div className="mt-1">
+                          <DeltaHint current={data.cip.submittedToday} previous={prev?.cip?.submittedToday} />
+                        </div>
+                      </label>
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">Total SSN CIP Submitted Today</span>
+                        <NumberInput ariaLabel="Total SSN CIP Submitted Today" value={data.cip.ssnToday} onChange={(v) => updateCip({ ssnToday: v })} />
+                        <div className="mt-1">
+                          <DeltaHint current={data.cip.ssnToday} previous={prev?.cip?.ssnToday} />
+                        </div>
+                      </label>
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-semibold text-slate-600">Total Non-SSN CIP Submitted Today</span>
+                        <NumberInput ariaLabel="Total Non-SSN CIP Submitted Today" value={data.cip.nonSsnToday} onChange={(v) => updateCip({ nonSsnToday: v })} />
+                        <div className="mt-1">
+                          <DeltaHint current={data.cip.nonSsnToday} previous={prev?.cip?.nonSsnToday} />
+                        </div>
+                      </label>
                     </div>
-                  </label>
-                  <label className="block sm:col-span-2">
-                    <span className="mb-2 block text-xs font-semibold text-slate-600">Total Submitted Today</span>
-                    <NumberInput ariaLabel="Total Submitted Today" value={data.cip.submittedToday} readOnly />
-                    <p className="mt-1 text-[11px] text-slate-500">= SSN CIP + Non-SSN CIP</p>
-                    <div className="mt-1">
-                      <DeltaHint current={data.cip.submittedToday} previous={prev?.cip?.submittedToday} />
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <h4 className="mb-2 text-sm font-semibold text-slate-900">Other CRON Checks</h4>
+                    <div className="space-y-3">
+                      <SimpleFormGrid
+                        fields={[['duplicateAlpaca', 'Duplicate Alpaca Accounts [Cron]']]}
+                        values={data.common}
+                        previousValues={prev?.common}
+                        setValues={(common) => setData({ ...data, common })}
+                        columns="sm:grid-cols-1"
+                      />
+                      <SimpleFormGrid
+                        fields={portfolioCheckField}
+                        values={data.ria}
+                        previousValues={prev?.ria}
+                        setValues={(ria) => setData({ ...data, ria })}
+                        columns="sm:grid-cols-1"
+                      />
+                      <SimpleFormGrid
+                        fields={[
+                          ['tradeCron', 'send_trade_confirmation [Cron]'],
+                          ['switchRiaUsersPortfolio', 'switch_ria_users_portfolio'],
+                        ]}
+                        values={data.common}
+                        previousValues={prev?.common}
+                        setValues={(common) => setData({ ...data, common })}
+                      />
                     </div>
-                  </label>
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-semibold text-slate-600">Total SSN CIP Submitted Today</span>
-                    <NumberInput ariaLabel="Total SSN CIP Submitted Today" value={data.cip.ssnToday} onChange={(v) => updateCip({ ssnToday: v })} />
-                    <div className="mt-1">
-                      <DeltaHint current={data.cip.ssnToday} previous={prev?.cip?.ssnToday} />
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-semibold text-slate-600">Total Non-SSN CIP Submitted Today</span>
-                    <NumberInput ariaLabel="Total Non-SSN CIP Submitted Today" value={data.cip.nonSsnToday} onChange={(v) => updateCip({ nonSsnToday: v })} />
-                    <div className="mt-1">
-                      <DeltaHint current={data.cip.nonSsnToday} previous={prev?.cip?.nonSsnToday} />
-                    </div>
-                  </label>
+                  </div>
                 </div>
               </div>
 
@@ -1303,101 +1410,137 @@ export default function App() {
                   No API errors today
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-[900px] w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
-                        {['API Name', 'Email', 'Error Details', 'Issue Source', 'Reported At', 'Backup Date', 'Backup Time', ''].map((h, i) => (
-                          <th key={i} className="px-2 py-2.5 normal-case tracking-normal">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.productionFailedApis.map((row, index) => {
-                        const prevRow = prev?.productionFailedApis?.[index]
-                        const createdAtParts = parseCreatedAtParts(row.createdAt)
-                        return (
-                          <tr key={index} className="border-b border-slate-100 align-top">
-                            <td className="px-2 py-2">
-                              <input
-                                aria-label={`Production API ${index + 1} name`}
-                                value={row.apiName}
-                                onChange={(e) => updateProductionFailedApi(index, 'apiName', e.target.value)}
-                                className="w-full min-w-[180px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
-                              />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input
-                                aria-label={`Production API ${index + 1} email`}
-                                value={row.userId}
-                                onChange={(e) => updateProductionFailedApi(index, 'userId', e.target.value)}
-                                placeholder="smart.hussain2006@gmail.com"
-                                className="w-full min-w-[190px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
-                              />
-                            </td>
-                            <td className="px-2 py-2">
-                              <textarea
-                                aria-label={`Production API ${index + 1} error`}
-                                value={row.error}
-                                onChange={(e) => updateProductionFailedApi(index, 'error', e.target.value)}
-                                rows={3}
-                                className="w-full min-w-[240px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-100"
-                              />
-                            </td>
-                            <td className="px-2 py-2">
-                              <select
-                                aria-label={`Production API ${index + 1} issue owner`}
-                                value={row.issueOwner}
-                                onChange={(e) => updateProductionFailedApi(index, 'issueOwner', e.target.value)}
-                                className="w-full min-w-[130px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-                              >
-                                <option>User</option>
-                                <option>Our issue</option>
-                              </select>
-                            </td>
-                            <td className="px-2 py-2">
-                              <input
-                                aria-label={`Production API ${index + 1} createdAt`}
-                                value={row.createdAt}
-                                onChange={(e) => updateProductionFailedApi(index, 'createdAt', e.target.value)}
-                                placeholder="2026-08-17 05:03:19"
-                                className="w-full min-w-[190px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
-                              />
-                              <div className="mt-1 text-[11px] text-slate-500">{formatCreatedAtDisplay(row.createdAt)}</div>
-                            </td>
-                            <td className="px-2 py-2">
-                              <input
-                                aria-label={`Production API ${index + 1} backup date`}
-                                type="date"
-                                value={createdAtParts.date}
-                                onChange={(e) => updateProductionFailedApi(index, 'createdAt', composeCreatedAt(e.target.value, createdAtParts.time))}
-                                className="w-full min-w-[140px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
-                              />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input
-                                aria-label={`Production API ${index + 1} backup time`}
-                                type="time"
-                                step="1"
-                                value={createdAtParts.time}
-                                onChange={(e) => updateProductionFailedApi(index, 'createdAt', composeCreatedAt(createdAtParts.date, e.target.value))}
-                                className="w-full min-w-[110px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800"
-                              />
-                            </td>
-                            <td className="w-10 px-2 py-2">
-                              <button
-                                aria-label={`Delete production API row ${index + 1}`}
-                                onClick={() => setData((old) => ({ ...old, productionFailedApis: old.productionFailedApis.filter((_, i) => i !== index) }))}
-                                className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                <div className="space-y-3">
+                  {data.productionFailedApis.map((row, index) => {
+                    const createdAtParts = parseCreatedAtParts(row.createdAt)
+                    return (
+                      <div key={index} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">API Error #{index + 1}</div>
+                          <button
+                            aria-label={`Delete production API row ${index + 1}`}
+                            onClick={() => setData((old) => ({ ...old, productionFailedApis: old.productionFailedApis.filter((_, i) => i !== index) }))}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <label className="block sm:col-span-2 lg:col-span-1">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-600">API Name</span>
+                            <input
+                              aria-label={`Production API ${index + 1} name`}
+                              value={row.apiName}
+                              onChange={(e) => updateProductionFailedApi(index, 'apiName', e.target.value)}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Email</span>
+                            <input
+                              aria-label={`Production API ${index + 1} email`}
+                              value={row.userId}
+                              onChange={(e) => updateProductionFailedApi(index, 'userId', e.target.value)}
+                              placeholder="smart.hussain2006@gmail.com"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Log ID</span>
+                            <input
+                              aria-label={`Production API ${index + 1} log id`}
+                              value={row.logId || ''}
+                              onChange={(e) => updateProductionFailedApi(index, 'logId', e.target.value)}
+                              placeholder="e.g. 184920"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+                            />
+                          </label>
+                        </div>
+
+                        <label className="mt-3 block">
+                          <span className="mb-1.5 block text-xs font-semibold text-slate-600">Error Details</span>
+                          <textarea
+                            aria-label={`Production API ${index + 1} error`}
+                            value={row.error}
+                            onChange={(e) => updateProductionFailedApi(index, 'error', e.target.value)}
+                            rows={2}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-100"
+                          />
+                        </label>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Issue Source</span>
+                            <select
+                              aria-label={`Production API ${index + 1} issue owner`}
+                              value={row.issueOwner}
+                              onChange={(e) => updateProductionFailedApi(index, 'issueOwner', e.target.value)}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700"
+                            >
+                              <option>User</option>
+                              <option>Our issue</option>
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Repeats</span>
+                            <NumberInput
+                              ariaLabel={`Production API ${index + 1} repeats`}
+                              value={row.repeatCount}
+                              onChange={(v) => updateProductionFailedApi(index, 'repeatCount', v)}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Users</span>
+                            <select
+                              aria-label={`Production API ${index + 1} user scope`}
+                              value={row.userScope || 'Same user'}
+                              onChange={(e) => updateProductionFailedApi(index, 'userScope', e.target.value)}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700"
+                            >
+                              <option>Same user</option>
+                              <option>Different users</option>
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Reported At</span>
+                            <input
+                              aria-label={`Production API ${index + 1} createdAt`}
+                              value={row.createdAt}
+                              onChange={(e) => updateProductionFailedApi(index, 'createdAt', e.target.value)}
+                              placeholder="2026-08-17 05:03:19"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+                            />
+                            <div className="mt-1 text-[11px] text-slate-500">{formatCreatedAtDisplay(row.createdAt)}</div>
+                          </label>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-500">Backup Date</span>
+                            <input
+                              aria-label={`Production API ${index + 1} backup date`}
+                              type="date"
+                              value={createdAtParts.date}
+                              onChange={(e) => updateProductionFailedApi(index, 'createdAt', composeCreatedAt(e.target.value, createdAtParts.time))}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold text-slate-500">Backup Time</span>
+                            <input
+                              aria-label={`Production API ${index + 1} backup time`}
+                              type="time"
+                              step="1"
+                              value={createdAtParts.time}
+                              onChange={(e) => updateProductionFailedApi(index, 'createdAt', composeCreatedAt(createdAtParts.date, e.target.value))}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               <button
@@ -1412,75 +1555,25 @@ export default function App() {
           <Section
             number="6"
             title="User UTM Tracking (Top 100)"
-            subtitle="Edit, add, or remove rows as the UTM list changes"
+            subtitle="Enter totals manually from the report"
             headerRight={<span className="rounded-full bg-[#E8FAF1] px-3 py-1.5 text-xs font-bold text-emerald-700">Total UTM: {display(utmTotal)} | Account Created: {display(utmCreatedTotal)}</span>}
           >
-            <div className="overflow-x-auto">
-              <table className="min-w-[760px] w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
-                    {['Source', 'Medium', 'Campaign', 'Total', 'In Drafts', 'Acc Created', ''].map((h, i) => (
-                      <th key={h} className="px-2 py-2">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.utm.map((row, index) => {
-                    const prevRow = prev?.utm?.[index]
-                    return (
-                      <tr key={`${row.source}-${index}`} className="border-b border-slate-100 align-top">
-                        <td className="px-2 py-2">
-                          <input
-                            aria-label={`UTM ${index + 1} source`}
-                            value={row.source}
-                            onChange={(e) => updateUtm(index, 'source', e.target.value)}
-                            className="w-full min-w-[140px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-medium text-slate-800"
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <input
-                            aria-label={`UTM ${index + 1} medium`}
-                            value={row.medium}
-                            onChange={(e) => updateUtm(index, 'medium', e.target.value)}
-                            className="w-full min-w-[120px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <input
-                            aria-label={`UTM ${index + 1} campaign`}
-                            value={row.campaign}
-                            onChange={(e) => updateUtm(index, 'campaign', e.target.value)}
-                            className="w-full min-w-[170px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-                          />
-                        </td>
-                        {['total', 'draft', 'created'].map((key) => (
-                          <td key={key} className="w-28 px-2 py-2">
-                            <NumberInput ariaLabel={`${row.source} ${key}`} value={row[key]} onChange={(v) => updateUtm(index, key, v)} />
-                            <DeltaHint current={row[key]} previous={prevRow?.[key]} />
-                          </td>
-                        ))}
-                        <td className="w-10 px-2 py-2">
-                          <button
-                            aria-label={`Delete UTM row ${index + 1}`}
-                            disabled={data.utm.length === 1}
-                            onClick={() => setData((old) => ({ ...old, utm: old.utm.filter((_, i) => i !== index) }))}
-                            className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold text-slate-600">Total UTM</span>
+                <NumberInput ariaLabel="Total UTM" value={data.utm.total} onChange={(v) => updateUtm({ total: v })} />
+                <div className="mt-1">
+                  <DeltaHint current={data.utm.total} previous={prev?.utm?.total} />
+                </div>
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold text-slate-600">Account Created</span>
+                <NumberInput ariaLabel="Account Created" value={data.utm.created} onChange={(v) => updateUtm({ created: v })} />
+                <div className="mt-1">
+                  <DeltaHint current={data.utm.created} previous={prev?.utm?.created} />
+                </div>
+              </label>
             </div>
-            <button
-              onClick={() => setData((old) => ({ ...old, utm: [...old.utm, emptyUtmRow()] }))}
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
-            >
-              <Plus size={16} /> Add UTM row
-            </button>
           </Section>
         </div>
 
