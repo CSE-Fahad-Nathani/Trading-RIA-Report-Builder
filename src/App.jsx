@@ -118,10 +118,10 @@ const initialState = () => ({
 })
 
 const moneyKeys = new Set(['totalFund', 'maxFund'])
-const warningCommon = new Set(['signupErrors', 'w8ben', 'w9', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios', 'switchRiaUsersPortfolio'])
+const warningCommon = new Set(['signupErrors', 'w8ben', 'w9', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios'])
 const warningKeys = new Set([...warningCommon, 'canSubmit', 'portfolioCheck', 'without'])
 const greenMoneyKeys = new Set(['totalFund', 'maxFund'])
-const panicKeys = new Set(['riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'w9', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios', 'closed', 'canSubmit', 'switchRiaUsersPortfolio'])
+const panicKeys = new Set(['riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'w9', 'duplicateAlpaca', 'duplicateDrafts', 'duplicateEmails', 'inactivePortfolios', 'closed', 'canSubmit'])
 // "Panic Alert" — clean premium card with red dot + accent count. Trigger: value > 0.
 
 function isPanicAlert(key, value) {
@@ -159,7 +159,7 @@ const panicFormTone = {
   input: 'font-bold text-white',
 }
 
-const panicBlackTextKeys = new Set(['closed', 'riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'w9', 'canSubmit', 'switchRiaUsersPortfolio'])
+const panicBlackTextKeys = new Set(['closed', 'riaPortfolioChangeRequests', 'signupErrors', 'w8ben', 'w9', 'canSubmit'])
 
 function panicInputClass(key) {
   return panicBlackTextKeys.has(key)
@@ -191,6 +191,7 @@ const KYC_WAITING_BREAKDOWN_TOOLTIP = 'KYC waiting count split by SSN and Non-SS
 
 const commonReportLabels = {
   tradeCron: 'Trade confirmation emails sent',
+  switchRiaUsersPortfolio: 'switch_ria_users_portfolio CRON',
 }
 
 function num(value) {
